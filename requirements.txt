@@ -1,50 +1,52 @@
 # Core Framework & ASGI Server
-fastapi>=0.111.0
-uvicorn[standard]>=0.30.1
+fastapi>=0.111.0,<1.0.0
+uvicorn[standard]>=0.30.0
 gunicorn>=22.0.0
 
 # Database & ORM
-sqlalchemy>=2.0.31
-alembic>=1.13.2
+sqlalchemy>=2.0.30,<3.0.0
+alembic>=1.13.0
 psycopg2-binary>=2.9.9
 pgvector>=0.2.5
 
 # Validation & Settings
-pydantic>=2.13.4
-pydantic-settings>=2.3.4
-email-validator>=2.1.1
+pydantic>=2.7.0,<3.0.0
+pydantic-settings>=2.3.0,<3.0.0
+email-validator>=2.1.0
 
 # Security & Authentication
-pyjwt>=2.13.0
-bcrypt>=4.1.3
-argon2-cffi>=25.1.0
-cryptography>=43.0.1
+pyjwt>=2.8.0,<3.0.0
+bcrypt>=4.1.0
+argon2-cffi>=23.1.0
+cryptography>=42.0.0
 
 # Caching & Rate Limiting
-redis>=5.0.8
+redis>=5.0.0
 slowapi>=0.1.9
 
-# AI & Copilot LLM Integration
+# AI & Copilot LLM Providers
 openai>=1.10.0
-google-genai>=2.12.1
-groq>=0.13.0
+google-genai>=0.1.0
+groq>=0.9.0
 
 # File Uploads, PDF & Image Processing
-pillow>=10.4.0
+pillow>=10.2.0
 python-multipart>=0.0.9
-aiofiles>=23.2.1
-reportlab>=4.2.2
+aiofiles>=23.2.0
+reportlab>=4.1.0
 qrcode[pil]>=7.4.2
 
 # Mail & Notifications
 fastapi-mail>=1.4.1
 wasenderapi>=0.3.5
-supabase>=2.31.0
+supabase>=2.4.0
 
-# General Utilities
-python-dotenv>=1.0.1
-httpx>=0.28.1
-numpy>=1.26.4
-jinja2>=3.1.5
-python-dateutil>=2.9.0
-starlette>=0.37.2
+# General Utilities & Networking
+python-dotenv>=1.0.0
+httpx>=0.27.0
+requests>=2.31.0
+numpy>=1.26.0
+jinja2>=3.1.3
+python-dateutil>=2.8.2
+starlette>=0.37.0
+tzdata>=2024.1

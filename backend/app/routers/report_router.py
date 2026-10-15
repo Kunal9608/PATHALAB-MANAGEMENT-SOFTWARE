@@ -1,5 +1,5 @@
 """Report router."""
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks, Form, Query, Body
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks, Form, Query, Body, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
@@ -8,8 +8,8 @@ import uuid
 import os
 
 from backend.app.core.db import get_db
-from backend.app.dependencies import get_current_user, check_patient_access
-from backend.app.services import report_service
+from backend.app.dependencies import get_current_user, check_patient_access, get_client_ip
+from backend.app.services import report_service, audit_service
 from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -126,14 +126,46 @@ def list_reports(patient_id: uuid.UUID, current_user=Depends(get_current_user),
 
 @router.get("/download/{report_id}")
 def download_report(report_id: uuid.UUID,
+                    request: Request = None,
                     action: str = Query("view"),
                     current_user=Depends(get_current_user),
                     db: Session = Depends(get_db)):
     from backend.app.models.report import Report
+    from backend.app.repositories import patient_repo
+
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
+    # Enforce patient authorization immediately to prevent IDOR / BOLA
+    patient = patient_repo.get_by_id(db, report.patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    check_patient_access(current_user, patient)
+
+    # Immutable Audit Log: track who (staff/admin), when, and which patient's report was viewed/printed/downloaded
+    client_ip = get_client_ip(request) if request else "127.0.0.1"
+    log_action = "report.download" if action == "download" else ("report.print" if action == "print" else "report.view")
+    audit_service.log(
+        db,
+        action=log_action,
+        actor_user_id=current_user.id,
+        entity_type="report",
+        entity_id=report.id,
+        after={
+            "action": action,
+            "patient_id": str(patient.id),
+            "patient_code": patient.patient_code,
+            "patient_name": patient.name,
+            "report_id": str(report.id),
+            "filename": report.original_filename or "report.pdf",
+            "actor_name": getattr(current_user, "name", None),
+            "actor_email": getattr(current_user, "email", None),
+            "actor_role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+        },
+        ip_address=client_ip
+    )
+
     from backend.app.config import settings
     from fastapi.responses import Response, FileResponse
     
@@ -163,14 +195,54 @@ def download_report(report_id: uuid.UUID,
 
     if not os.path.exists(report.file_path):
         raise HTTPException(status_code=404, detail="Report file not found on disk")
-    
+
+    return FileResponse(report.file_path, media_type="application/pdf", headers=headers)
+
+
+@router.post("/{report_id}/log-action")
+def log_report_action(
+    report_id: uuid.UUID,
+    request: Request = None,
+    payload: Dict[str, Any] = Body(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Explicitly audit log a client-side action (e.g. 'print', 'download') on a report."""
+    from backend.app.models.report import Report
     from backend.app.repositories import patient_repo
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
     patient = patient_repo.get_by_id(db, report.patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     check_patient_access(current_user, patient)
 
-    return FileResponse(report.file_path, media_type="application/pdf", headers=headers)
+    action_type = payload.get("action", "print")
+    log_action = f"report.{action_type}"
+    client_ip = get_client_ip(request) if request else "127.0.0.1"
+    audit_service.log(
+        db,
+        action=log_action,
+        actor_user_id=current_user.id,
+        entity_type="report",
+        entity_id=report.id,
+        after={
+            "action": action_type,
+            "patient_id": str(patient.id),
+            "patient_code": patient.patient_code,
+            "patient_name": patient.name,
+            "report_id": str(report.id),
+            "filename": report.original_filename or "report.pdf",
+            "actor_name": getattr(current_user, "name", None),
+            "actor_email": getattr(current_user, "email", None),
+            "actor_role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+        },
+        ip_address=client_ip
+    )
+    return {"status": "ok", "action": log_action}
 
 
 @router.get("/verify/{report_id}")

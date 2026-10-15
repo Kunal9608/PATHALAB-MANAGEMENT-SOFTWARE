@@ -268,8 +268,320 @@ const Shell = (() => {
     window.location.href = '/';
   }
 
+  let _initialized = false;
+  let _isNavigating = false;
+  let _sidebarRendered = false;
+
+  function updateActiveNavLink(currentPath) {
+    if (!currentPath) currentPath = window.location.pathname;
+    const norm = currentPath.split('?')[0].replace(/\.html$/, '');
+    const sidebarEl = document.getElementById('sidebar');
+    if (!sidebarEl) return;
+    sidebarEl.querySelectorAll('.nav-item').forEach(item => {
+      const href = item.getAttribute('href');
+      if (!href) return;
+      const normHref = href.split('?')[0].replace(/\.html$/, '');
+      if (norm === normHref || (normHref !== '/' && norm.startsWith(normHref))) {
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  }
+
+  function getSkeletonLoaderHtml() {
+    return `
+      <div class="skeleton-page-loader" style="animation: skelFadeIn 0.15s ease-out; padding: 4px 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; flex-wrap: wrap;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <span class="skel skel-heading" style="width: 220px; height: 26px;"></span>
+            <span class="skel skel-text-xs" style="width: 300px;"></span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <span class="skel skel-btn" style="width: 100px; height: 36px;"></span>
+            <span class="skel skel-btn" style="width: 130px; height: 36px;"></span>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 24px;">
+          <div class="ledger-item" style="padding: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);"><span class="skel skel-label skel-w-12"></span><span class="skel skel-kpi skel-w-20" style="margin: 10px 0 6px;"></span><span class="skel skel-text-xs skel-w-16"></span></div>
+          <div class="ledger-item" style="padding: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);"><span class="skel skel-label skel-w-12"></span><span class="skel skel-kpi skel-w-20" style="margin: 10px 0 6px;"></span><span class="skel skel-text-xs skel-w-16"></span></div>
+          <div class="ledger-item" style="padding: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);"><span class="skel skel-label skel-w-12"></span><span class="skel skel-kpi skel-w-20" style="margin: 10px 0 6px;"></span><span class="skel skel-text-xs skel-w-16"></span></div>
+          <div class="ledger-item" style="padding: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);"><span class="skel skel-label skel-w-12"></span><span class="skel skel-kpi skel-w-20" style="margin: 10px 0 6px;"></span><span class="skel skel-text-xs skel-w-16"></span></div>
+        </div>
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; padding: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 16px;">
+            <span class="skel skel-heading" style="width: 160px; height: 20px;"></span>
+            <span class="skel" style="width: 220px; height: 34px; border-radius: var(--radius-md);"></span>
+          </div>
+          <div class="skel-table-row"><div class="skel skel-cell-a"></div><div class="skel skel-cell-b"></div><div class="skel skel-cell-c"></div><div class="skel skel-cell-d"></div><div class="skel skel-cell-e"></div></div>
+          <div class="skel-table-row"><div class="skel skel-cell-a"></div><div class="skel skel-cell-b"></div><div class="skel skel-cell-c"></div><div class="skel skel-cell-d"></div><div class="skel skel-cell-e"></div></div>
+          <div class="skel-table-row"><div class="skel skel-cell-a"></div><div class="skel skel-cell-b"></div><div class="skel skel-cell-c"></div><div class="skel skel-cell-d"></div><div class="skel skel-cell-e"></div></div>
+          <div class="skel-table-row"><div class="skel skel-cell-a"></div><div class="skel skel-cell-b"></div><div class="skel skel-cell-c"></div><div class="skel skel-cell-d"></div><div class="skel skel-cell-e"></div></div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function setupFlatpickr() {
+    try {
+      const dateInputs = document.querySelectorAll('input[type="date"]');
+      if (dateInputs.length === 0) return;
+
+      if (!document.querySelector('link[href*="flatpickr"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
+        document.head.appendChild(link);
+      }
+      
+      if (!document.getElementById('flatpickr-custom-style')) {
+        const style = document.createElement('style');
+        style.id = 'flatpickr-custom-style';
+        style.innerHTML = `
+          .flatpickr-calendar {
+            background: var(--color-surface) !important;
+            border: 1.5px solid var(--color-border) !important;
+            box-shadow: var(--shadow-md) !important;
+            font-family: var(--font-body) !important;
+            border-radius: var(--radius-md) !important;
+          }
+          .flatpickr-calendar .flatpickr-months { background: transparent !important; }
+          .flatpickr-current-month { color: var(--color-ink) !important; }
+          .flatpickr-current-month input.cur-year { color: var(--color-ink) !important; }
+          .flatpickr-calendar .flatpickr-weekday { color: var(--color-ink-muted) !important; font-weight: 600 !important; }
+          .flatpickr-day { color: var(--color-ink) !important; border-radius: var(--radius-sm) !important; }
+          .flatpickr-day.today { border-color: var(--color-ink-muted) !important; }
+          .flatpickr-day.today:hover { background: var(--color-border) !important; color: var(--color-ink) !important; }
+          .flatpickr-day.selected, .flatpickr-day.selected:focus, .flatpickr-day.selected:hover {
+            background: var(--color-primary) !important;
+            border-color: var(--color-primary) !important;
+            color: #fff !important;
+          }
+          .flatpickr-day:hover { background: var(--color-border) !important; }
+          .flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month {
+            fill: var(--color-ink) !important; color: var(--color-ink) !important;
+          }
+          .flatpickr-months .flatpickr-prev-month:hover svg, .flatpickr-months .flatpickr-next-month:hover svg {
+            fill: var(--color-primary) !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+      
+      if (typeof flatpickr === 'undefined') {
+        await new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/flatpickr';
+          script.onload = resolve;
+          document.head.appendChild(script);
+        });
+      }
+      
+      document.querySelectorAll('input[type="date"]').forEach(input => {
+        input.type = 'text';
+        flatpickr(input, {
+          dateFormat: 'Y-m-d',
+          maxDate: input.id === 'staff-dob' || input.id === 'patient-dob' ? 'today' : undefined,
+          allowInput: true
+        });
+      });
+    } catch (e) {
+      console.warn("Flatpickr auto initialization failed:", e);
+    }
+  }
+
+  async function navigate(url, { pushState = true } = {}) {
+    if (!url) return;
+    const normTarget = url.split('#')[0].split('?')[0].replace(/\.html$/, '');
+    const normCurrent = window.location.pathname.replace(/\.html$/, '');
+    if (normTarget === normCurrent && !url.includes('?')) {
+      return;
+    }
+
+    if (_isNavigating) return;
+    _isNavigating = true;
+
+    try {
+      updateActiveNavLink(url);
+
+      // Close mobile drawer if open
+      document.getElementById('sidebar')?.classList.remove('open');
+      document.getElementById('sidebar-overlay')?.classList.remove('open');
+
+      const pageContent = document.querySelector('.page-content');
+      if (pageContent) {
+        pageContent.innerHTML = getSkeletonLoaderHtml();
+      }
+
+      // Fetch new page HTML
+      let res = await fetch(url, { credentials: 'include' });
+      if (!res.ok && !url.endsWith('.html') && !url.includes('.')) {
+        const altUrl = url.includes('?') ? url.replace('?', '.html?') : `${url}.html`;
+        const altRes = await fetch(altUrl, { credentials: 'include' });
+        if (altRes.ok) res = altRes;
+      }
+
+      if (!res.ok) {
+        window.location.href = url;
+        return;
+      }
+
+      const htmlText = await res.text();
+      const parser = new DOMParser();
+      const newDoc = parser.parseFromString(htmlText, 'text/html');
+      const newPageContent = newDoc.querySelector('.page-content');
+
+      if (!newPageContent || !pageContent) {
+        window.location.href = url;
+        return;
+      }
+
+      if (pushState) {
+        window.history.pushState({ spa: true, url }, '', url);
+      }
+
+      if (newDoc.title) {
+        document.title = newDoc.title;
+      }
+
+      const newTopbarTitle = newDoc.getElementById('topbar-title');
+      const curTopbarTitle = document.getElementById('topbar-title');
+      if (newTopbarTitle && curTopbarTitle) {
+        curTopbarTitle.textContent = newTopbarTitle.textContent;
+      }
+
+      // Clean up previous page modals/panels
+      document.querySelectorAll('.modal-backdrop, .slide-panel, .panel-overlay').forEach(el => {
+        if (!el.closest('.main-area') && !el.closest('.sidebar')) {
+          el.remove();
+        }
+      });
+
+      // Inject new page modals/panels
+      newDoc.querySelectorAll('.modal-backdrop, .slide-panel, .panel-overlay').forEach(el => {
+        document.body.appendChild(document.importNode(el, true));
+      });
+
+      // Inject page styles
+      newDoc.querySelectorAll('head style').forEach(styleEl => {
+        const existingStyles = Array.from(document.querySelectorAll('head style')).map(s => s.innerHTML.trim());
+        if (!existingStyles.includes(styleEl.innerHTML.trim())) {
+          const cloned = document.createElement('style');
+          cloned.innerHTML = styleEl.innerHTML;
+          document.head.appendChild(cloned);
+        }
+      });
+
+      newDoc.querySelectorAll('head link[rel="stylesheet"]').forEach(linkEl => {
+        const href = linkEl.getAttribute('href');
+        if (href && !document.querySelector(`link[href="${href}"]`)) {
+          const cloned = document.createElement('link');
+          cloned.rel = 'stylesheet';
+          cloned.href = href;
+          document.head.appendChild(cloned);
+        }
+      });
+
+      // Swap in the new page content
+      pageContent.innerHTML = newPageContent.innerHTML;
+
+      // Dynamically load any external scripts from the new page
+      const scriptPromises = [];
+      const newScripts = Array.from(newDoc.querySelectorAll('script'));
+      const coreScripts = ['api-client.js', 'table.js', 'offline-queue.js', 'shell.js', 'theme.js', 'copilot.js'];
+
+      for (const s of newScripts) {
+        const src = s.getAttribute('src');
+        if (src) {
+          if (coreScripts.some(core => src.includes(core))) continue;
+          if (document.querySelector(`script[src="${src}"]`)) continue;
+
+          scriptPromises.push(new Promise((resolve) => {
+            const scriptEl = document.createElement('script');
+            scriptEl.src = src;
+            scriptEl.onload = resolve;
+            scriptEl.onerror = () => {
+              console.warn('Failed to load script in SPA:', src);
+              resolve();
+            };
+            document.head.appendChild(scriptEl);
+          }));
+        }
+      }
+
+      if (scriptPromises.length > 0) {
+        await Promise.all(scriptPromises);
+      }
+
+      // Execute new page inline scripts
+      for (const s of newScripts) {
+        if (!s.getAttribute('src') && s.textContent.trim()) {
+          const inlineScript = document.createElement('script');
+          inlineScript.textContent = s.textContent;
+          document.body.appendChild(inlineScript);
+          inlineScript.remove();
+        }
+      }
+
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    } catch (err) {
+      console.error('SPA navigation error, falling back:', err);
+      window.location.href = url;
+    } finally {
+      _isNavigating = false;
+    }
+  }
+
+  function setupSpaLinkInterception() {
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('a');
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (!href) return;
+
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (a.target === '_blank' || a.hasAttribute('download') || a.getAttribute('data-no-spa') !== null) return;
+      if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) return;
+      if (href.startsWith('/api/')) return;
+
+      const isAppRoute = href.startsWith('/admin') || href.startsWith('/staff') || href.startsWith('/profile');
+      if (!isAppRoute) return;
+
+      e.preventDefault();
+      navigate(href);
+    });
+
+    window.addEventListener('popstate', (e) => {
+      navigate(window.location.pathname + window.location.search, { pushState: false });
+    });
+  }
+
   async function init({ role = 'admin', pageTitle = '', searchable = false } = {}) {
-    // Auth check
+    // If already initialized in this SPA session, handle fast switch
+    if (_initialized && window._me) {
+      const path = window.location.pathname;
+      let expectedRole = null;
+      if (path.includes('/admin/')) expectedRole = 'admin';
+      else if (path.includes('/staff/')) expectedRole = 'staff';
+
+      if (expectedRole && window._me.role !== expectedRole) {
+        showAccessDenied(expectedRole, window._me.role);
+        throw new Error(`Access Denied: ${expectedRole} access required.`);
+      }
+
+      document.getElementById('page-blocking-style')?.remove();
+      updateActiveNavLink(window.location.pathname);
+      const topbarEl = document.getElementById('topbar-title');
+      if (topbarEl && pageTitle) topbarEl.textContent = pageTitle;
+
+      await setupFlatpickr();
+      if (typeof window.Copilot !== 'undefined') {
+        window.Copilot.init();
+      }
+      return window._me;
+    }
+
+    // First time auth check
     let me;
     try {
       me = await API.get('/api/v1/auth/me', { silent: true, cache: false });
@@ -315,7 +627,7 @@ const Shell = (() => {
 
     // Render sidebar
     const sidebarEl = document.getElementById('sidebar');
-    if (sidebarEl) {
+    if (sidebarEl && !_sidebarRendered) {
       const initials = (me.name || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
       sidebarEl.innerHTML = `
         <a href="${me.role === 'admin' ? '/admin/dashboard' : '/staff/patients'}" class="sidebar-brand" aria-label="Home">
@@ -346,6 +658,8 @@ const Shell = (() => {
         </div>
       `;
 
+      _sidebarRendered = true;
+
       // Logout
       document.getElementById('logout-btn')?.addEventListener('click', async () => {
         await Modal.confirm('Sign Out', 'Are you sure you want to sign out?', {
@@ -360,6 +674,8 @@ const Shell = (() => {
         });
       });
     }
+
+    updateActiveNavLink(currentPath);
 
     // Render topbar
     const topbarEl = document.getElementById('topbar-title');
@@ -457,110 +773,23 @@ const Shell = (() => {
       });
     }
 
-    // Re-bind theme toggle buttons now that topbar HTML has been injected by this shell
-    // Wait, the Theme toggle is being replaced by Copilot!
     if (typeof window.Copilot !== 'undefined') {
       window.Copilot.init();
     }
 
-    // Auto-setup flatpickr on date fields dynamically
-    try {
-      const dateInputs = document.querySelectorAll('input[type="date"]');
-      if (dateInputs.length > 0) {
-        // 1. Inject CSS
-        if (!document.querySelector('link[href*="flatpickr"]')) {
-          const link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
-          document.head.appendChild(link);
-        }
-        
-        // 2. Inject Custom Theme overrides style block
-        if (!document.getElementById('flatpickr-custom-style')) {
-          const style = document.createElement('style');
-          style.id = 'flatpickr-custom-style';
-          style.innerHTML = `
-            .flatpickr-calendar {
-              background: var(--color-surface) !important;
-              border: 1.5px solid var(--color-border) !important;
-              box-shadow: var(--shadow-md) !important;
-              font-family: var(--font-body) !important;
-              border-radius: var(--radius-md) !important;
-            }
-            .flatpickr-calendar .flatpickr-months {
-              background: transparent !important;
-            }
-            .flatpickr-current-month {
-              color: var(--color-ink) !important;
-            }
-            .flatpickr-current-month input.cur-year {
-              color: var(--color-ink) !important;
-            }
-            .flatpickr-calendar .flatpickr-weekday {
-              color: var(--color-ink-muted) !important;
-              font-weight: 600 !important;
-            }
-            .flatpickr-day {
-              color: var(--color-ink) !important;
-              border-radius: var(--radius-sm) !important;
-            }
-            .flatpickr-day.today {
-              border-color: var(--color-ink-muted) !important;
-            }
-            .flatpickr-day.today:hover {
-              background: var(--color-border) !important;
-              color: var(--color-ink) !important;
-            }
-            .flatpickr-day.selected, .flatpickr-day.selected:focus, .flatpickr-day.selected:hover {
-              background: var(--color-primary) !important;
-              border-color: var(--color-primary) !important;
-              color: #fff !important;
-            }
-            .flatpickr-day:hover {
-              background: var(--color-border) !important;
-            }
-            .flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month {
-              fill: var(--color-ink) !important;
-              color: var(--color-ink) !important;
-            }
-            .flatpickr-months .flatpickr-prev-month:hover svg, .flatpickr-months .flatpickr-next-month:hover svg {
-              fill: var(--color-primary) !important;
-            }
-          `;
-          document.head.appendChild(style);
-        }
-        
-        // 3. Inject JS and initialize
-        if (typeof flatpickr === 'undefined') {
-          await new Promise((resolve) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/flatpickr';
-            script.onload = resolve;
-            document.head.appendChild(script);
-          });
-        }
-        
-        // Convert input type to text and initialize flatpickr
-        document.querySelectorAll('input[type="date"]').forEach(input => {
-          input.type = 'text';
-          flatpickr(input, {
-            dateFormat: 'Y-m-d',
-            maxDate: input.id === 'staff-dob' || input.id === 'patient-dob' ? 'today' : undefined,
-            allowInput: true
-          });
-        });
-      }
-    } catch (e) {
-      console.warn("Flatpickr auto initialization failed:", e);
-    }
+    await setupFlatpickr();
+
+    // Setup SPA link click interception & history listeners
+    setupSpaLinkInterception();
 
     // Store me globally
     window._me = me;
+    _initialized = true;
     startInactivityTimer();
     return me;
   }
 
-  return { init, icon };
+  return { init, icon, navigate, getSkeletonLoaderHtml, updateActiveNavLink };
 })();
 // Global password visibility toggle handler via event delegation
 document.addEventListener('click', (e) => {

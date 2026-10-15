@@ -363,7 +363,7 @@
 
   // Load Settings and optionally load reCAPTCHA script
   try {
-    const settings = await API.get('/api/v1/settings/lab', { silent: true });
+    const settings = await API.get('/api/v1/settings/lab/public', { silent: true });
     recaptchaKey = settings.recaptcha_site_key;
     recaptchaEnabled = settings.recaptcha_enabled;
     

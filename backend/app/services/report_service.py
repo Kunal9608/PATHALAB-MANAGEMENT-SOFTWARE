@@ -114,6 +114,11 @@ def upload_report(db: Session, patient_id: uuid.UUID, file_bytes: bytes,
                       entity_type="report", entity_id=report.id,
                       after={"patient_code": patient.patient_code, "version": version})
     db.commit()
+    try:
+        from backend.app.core import copilot_cache
+        copilot_cache.invalidate_patient_sync(str(patient.patient_code))
+    except Exception:
+        pass
 
     # Notify using BackgroundTasks (fire-and-forget) — attach the PDF
     from backend.app.config import settings
@@ -195,8 +200,6 @@ def generate_and_save_structured_report(db: Session, patient_id: uuid.UUID, uplo
     if not test_notes_map:
         test_notes_map = {}
 
-    from backend.app.models.patient_test_result import PatientTestResult
-    from sqlalchemy.orm import joinedload
     from collections import defaultdict
     
     # Eagerly load all test results and their parameters in a single query (fixes N+1)

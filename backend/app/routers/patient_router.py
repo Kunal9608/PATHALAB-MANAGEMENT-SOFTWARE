@@ -117,7 +117,11 @@ def search_by_mobile(
     current_user=Depends(get_current_user),
 ):
     from backend.app.repositories import patient_repo
-    patients = patient_repo.search_by_mobile(db, mobile)
+    from backend.app.models.user import RoleEnum, ViewScopeEnum
+    collected_by = None
+    if current_user.role == RoleEnum.staff and current_user.view_scope == ViewScopeEnum.own:
+        collected_by = current_user.id
+    patients = patient_repo.search_by_mobile(db, mobile, collected_by=collected_by)
     return [patient_service._patient_to_dict(db, p) for p in patients]
 
 

@@ -3,6 +3,11 @@ Notification service — abstracted provider interface.
 Only EmailProvider is implemented. WhatsApp/SMS are stubs.
 """
 import logging
+import urllib.request
+import urllib.error
+import json
+import base64
+import httpx
 from typing import Optional, Dict, Any
 from abc import ABC, abstractmethod
 
@@ -174,10 +179,6 @@ class EmailProvider(NotificationProvider):
             # -------------------------------------------------------------
 
             # --- ACTIVE BREVO TRANSACTIONAL EMAIL REST CLIENT IMPLEMENTATION ---
-            import urllib.request
-            import urllib.error
-            import json
-            import base64
 
             subject = subject_map.get(event_type, "Notification from Akriti Diagnostics")
             html_body = body_map.get(event_type, f"<p>{context}</p>")
@@ -246,8 +247,6 @@ class WhatsAppProvider(NotificationProvider):
     def send(self, event_type: str, recipient_email: str, context: Dict[str, Any]) -> bool:
         try:
             from backend.app.config import settings
-            import httpx
-            import base64
 
             # --- WASENDER CONFIG CHECK ---
             if not settings.WASENDER_API_KEY:

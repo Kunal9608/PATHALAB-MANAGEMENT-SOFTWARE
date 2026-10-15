@@ -74,9 +74,16 @@ def save_patient_test_results(db: Session, patient_id: uuid.UUID, test_id: uuid.
     ).delete()
 
     saved_items = []
+    # Batch pre-fetch all parameters in one query to eliminate N+1 round trips
+    param_ids = [item["parameter_id"] for item in results if "parameter_id" in item]
+    param_map = {}
+    if param_ids:
+        params = db.query(TestParameter).filter(TestParameter.id.in_(param_ids)).all()
+        param_map = {p.id: p for p in params}
+
     for item in results:
         # Determine is_abnormal
-        param = db.query(TestParameter).filter(TestParameter.id == item["parameter_id"]).first()
+        param = param_map.get(item["parameter_id"])
         is_abnormal = False
         if item.get("is_abnormal") is not None:
             is_abnormal = bool(item["is_abnormal"])

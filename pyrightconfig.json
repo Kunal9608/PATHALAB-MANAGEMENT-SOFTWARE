@@ -1,0 +1,19 @@
+{
+  "include": [
+    "backend",
+    "main.py"
+  ],
+  "exclude": [
+    "backend/venv",
+    "**/__pycache__"
+  ],
+  "extraPaths": [
+    ".",
+    "backend",
+    "backend/venv/Lib/site-packages",
+    "C:/Users/Acer/AppData/Local/Programs/Python/Python311/Lib/site-packages"
+  ],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
+  "typeCheckingMode": "off"
+}

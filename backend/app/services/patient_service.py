@@ -59,7 +59,7 @@ def _check_duplicates(db: Session, mobile: str, sample_date: date, test_ids: Lis
         if duplicates:
             dup_test_ids = [d.test_id for d in duplicates]
             dup_tests = db.query(Test).filter(Test.id.in_(dup_test_ids)).all()
-            dup_names = ", ".join([t.name for t in dup_tests])
+            dup_names = ", ".join([str(t.name) for t in dup_tests])
             raise ValueError(f"Patient with mobile {mobile} has already booked test(s) ({dup_names}) on this day")
 
 
@@ -163,6 +163,11 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
     )
 
     db.commit()
+    try:
+        from backend.app.core import copilot_cache
+        copilot_cache.invalidate_patient_sync(patient_code)
+    except Exception:
+        pass
     return _patient_to_dict(db, patient)
 
 
@@ -176,10 +181,9 @@ def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdate,
     before = _patient_to_dict(db, patient)
     update_data = payload.model_dump(exclude_none=True)
 
-    # Check same-day same-test duplicates for patient by mobile number on update
     new_mobile = payload.mobile or patient.mobile
     new_sample_date = payload.sample_date or patient.sample_date
-    new_test_ids = payload.test_ids if payload.test_ids is not None else [t.id for t in patient.patient_tests]
+    new_test_ids = payload.test_ids if payload.test_ids is not None else [t.test_id for t in (patient.patient_tests or [])]
 
     if payload.mobile is not None or payload.sample_date is not None or payload.test_ids is not None:
         _check_duplicates(db, new_mobile, new_sample_date, new_test_ids, exclude_patient_id=patient.id, force_duplicate=payload.force_duplicate)
@@ -278,6 +282,12 @@ def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdate,
     db.commit()
 
     patient = patient_repo.get_by_id(db, patient_id)
+    if patient and patient.patient_code:
+        try:
+            from backend.app.core import copilot_cache
+            copilot_cache.invalidate_patient_sync(str(patient.patient_code))
+        except Exception:
+            pass
     return _patient_to_dict(db, patient, include_history=True)
 
 
@@ -442,12 +452,12 @@ def _patient_to_dict(db: Session, patient, include_history: bool = False) -> dic
         "total_amount": float(patient.total_amount or 0),
         "discount_amount": float(patient.discount_amount or 0),
         "amount_paid": float(patient.amount_paid or 0),
-        "amount_due": patient.amount_due,
+        "amount_due": float(patient.amount_due or 0),
         "payment_mode": patient.payment_mode,
         "payment_status": patient.payment_status,
         "referred_doctor_commission_pct": float(patient.referred_doctor_commission_pct or 0.0),
         "referred_doctor_commission_amount": float(patient.referred_doctor_commission_amount or 0.0),
-        "status": patient.status,
+        "status": patient.status.value if hasattr(patient.status, 'value') else str(patient.status),
         "processing_note": patient.processing_note,
         "created_at": patient.created_at.isoformat() if patient.created_at else None,
         "updated_at": patient.updated_at.isoformat() if patient.updated_at else None,

@@ -1,7 +1,7 @@
 """OTP request model — hashed, single-use, 5-minute TTL."""
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Enum, DateTime, text
+from sqlalchemy import Column, String, Enum, DateTime, text, Index
 from sqlalchemy.dialects.postgresql import UUID
 import enum
 
@@ -27,3 +27,7 @@ class OtpRequest(Base):
     used_at = Column(DateTime(timezone=True), nullable=True)
     requesting_ip = Column(String(45), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_otp_requests_email_purpose", "email", "purpose", "expires_at"),
+    )

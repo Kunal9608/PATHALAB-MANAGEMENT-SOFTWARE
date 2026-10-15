@@ -114,10 +114,21 @@ def list_patients(
     return items, total
 
 
-def search_by_mobile(db: Session, mobile: str) -> List[Patient]:
-    return (
+def search_by_mobile(db: Session, mobile: str, collected_by: Optional[uuid.UUID] = None) -> List[Patient]:
+    query = (
         db.query(Patient)
+        .options(
+            selectinload(Patient.patient_tests).joinedload(PatientTest.test),
+            joinedload(Patient.doctor),
+            joinedload(Patient.collector),
+            selectinload(Patient.reports),
+        )
         .filter(Patient.mobile == mobile, Patient.deleted_at.is_(None))
+    )
+    if collected_by:
+        query = query.filter(Patient.collected_by == collected_by)
+    return (
+        query
         .order_by(desc(Patient.created_at))
         .limit(5)
         .all()
@@ -130,6 +141,7 @@ def update_patient(db: Session, patient_id: uuid.UUID, **kwargs) -> Optional[Pat
         return None
     for k, v in kwargs.items():
         setattr(patient, k, v)
+    # pyrefly: ignore [bad-assignment]
     patient.updated_at = datetime.now(timezone.utc)
     db.flush()
     return patient
@@ -157,7 +169,9 @@ def get_today_stats(db: Session):
         Patient.deleted_at.is_(None)
     ).first()
 
+    # pyrefly: ignore [unsupported-operation]
     count = stats[0] or 0
+    # pyrefly: ignore [unsupported-operation]
     revenue = float(stats[1] or 0)
 
     pending = db.query(Patient).filter(

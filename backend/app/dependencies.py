@@ -71,10 +71,27 @@ def require_role(allowed_roles: list):
 
 
 def get_client_ip(request: Request) -> str:
+    """
+    Extract real client IP.
+    Only trust X-Forwarded-For when the direct connection comes from a private/loopback address
+    (i.e., behind a genuine reverse proxy like nginx). This prevents IP spoofing via forged headers
+    on direct connections, which could bypass rate limiting.
+    """
+    import ipaddress
+
+    direct_ip = request.client.host if request.client else "0.0.0.0"
     forwarded = request.headers.get("X-Forwarded-For")
+
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "0.0.0.0"
+        try:
+            addr = ipaddress.ip_address(direct_ip)
+            # Only trust proxy header if direct connection is from private/loopback network
+            if addr.is_private or addr.is_loopback:
+                return forwarded.split(",")[0].strip()
+        except ValueError:
+            pass
+
+    return direct_ip
 
 
 def get_idempotency_key(

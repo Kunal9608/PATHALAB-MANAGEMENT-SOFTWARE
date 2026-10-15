@@ -39,9 +39,10 @@ async def value_error_handler(request: Request, exc: ValueError):
 
 
 async def permission_error_handler(request: Request, exc: PermissionError):
+    # Do not leak raw exception text; return a generic 403 message
     return JSONResponse(
         status_code=403,
-        content={"detail": str(exc), "message": str(exc)},
+        content={"detail": "You do not have permission to perform this action.", "message": "Forbidden"},
     )
 
 

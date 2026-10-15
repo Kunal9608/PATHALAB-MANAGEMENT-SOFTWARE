@@ -13,13 +13,14 @@ from backend.app.config import settings
 logger = logging.getLogger(__name__)
 
 # --- Face recognition is disabled right now per user request ---
+fr_lib = None
 FACE_RECOGNITION_AVAILABLE = False
 logger.warning("face_recognition explicitly disabled — using stub mode for face enrollment")
 
 
 def _compute_embedding(image_bytes: bytes) -> Optional[np.ndarray]:
     """Return 128-dim face embedding or None if no single face found."""
-    if not FACE_RECOGNITION_AVAILABLE:
+    if not FACE_RECOGNITION_AVAILABLE or fr_lib is None:
         # Stub: return random unit vector for development without dlib
         vec = np.random.rand(128).astype(np.float32)
         return vec / np.linalg.norm(vec)
@@ -137,7 +138,7 @@ def recognize(db: Session, image_bytes: bytes) -> dict:
 
     threshold = settings.FACE_MATCH_THRESHOLD
 
-    if best_score < threshold:
+    if best_score < threshold or not best_user_id:
         return {
             "matched": False,
             "reason": f"Face not recognized clearly (confidence: {best_score:.2f})",

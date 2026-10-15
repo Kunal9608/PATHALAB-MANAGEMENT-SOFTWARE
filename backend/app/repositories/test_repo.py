@@ -55,7 +55,7 @@ def generate_test_code(db: Session, year: int) -> str:
 
 def backfill_test_codes(db: Session):
     from datetime import datetime
-    tests = db.query(Test).filter((Test.test_code == None) | (Test.test_code == "")).all()
+    tests = db.query(Test).filter((Test.test_code.is_(None)) | (Test.test_code == "")).all()
     if not tests:
         return
     current_year = datetime.now().year
@@ -74,7 +74,7 @@ def create_test(db: Session, name: str, price: float, category: Optional[str] = 
     return test
 
 
-def update_test(db: Session, test_id: uuid.UUID, **kwargs) -> Optional[Test]:
+def update_test(db: Session, test_id: uuid.UUID, **kwargs) -> Optional[Tuple[Test, float]]:
     test = get_test_by_id(db, test_id)
     if not test:
         return None

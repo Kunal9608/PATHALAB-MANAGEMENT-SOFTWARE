@@ -55,12 +55,16 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# Disable Swagger UI and ReDoc in production to prevent API schema exposure
+_docs_url = None if os.getenv("ENVIRONMENT", "development").lower() == "production" else "/docs"
+_redoc_url = None if os.getenv("ENVIRONMENT", "development").lower() == "production" else "/redoc"
+
 app = FastAPI(
     title="Akriti Diagnostics Center — Lab Management System",
     description="Pathology lab management API",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
     lifespan=lifespan,
 )
 
@@ -137,7 +141,7 @@ async def add_security_headers(request: Request, call_next):
     # 3. Prevent MIME type sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
     
-    # 4. Cross-Site Scripting protection
+    # 4. Cross-Site Scripting protection (legacy browsers)
     response.headers["X-XSS-Protection"] = "1; mode=block"
     
     # 5. Referrer Policy
@@ -146,6 +150,22 @@ async def add_security_headers(request: Request, call_next):
     # 6. HTTP Strict Transport Security (HSTS) - only in production
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    
+    # 7. Permissions Policy — disable sensitive browser APIs not needed by the app
+    response.headers["Permissions-Policy"] = (
+        "accelerometer=(), "
+        "camera=(), "
+        "geolocation=(), "
+        "gyroscope=(), "
+        "magnetometer=(), "
+        "microphone=(), "
+        "payment=(), "
+        "usb=()"
+    )
+    
+    # 8. Remove server fingerprinting header
+    if "server" in response.headers:
+        del response.headers["server"]
         
     return response
 
@@ -177,9 +197,11 @@ def health(db: Session = Depends(get_db)):
         db.execute(text("SELECT 1"))
         return {"status": "ok", "service": "Akriti Lab Management System", "database": "connected"}
     except Exception as e:
+        # Never expose internal DB error details to the outside world
+        detail = str(e) if not settings.is_production else "Database unreachable"
         return JSONResponse(
             status_code=503,
-            content={"status": "error", "service": "Akriti Lab Management System", "database": "disconnected", "detail": str(e)}
+            content={"status": "error", "service": "Akriti Lab Management System", "database": "disconnected", "detail": detail}
         )
 
 
@@ -212,7 +234,8 @@ _lab_settings_overlay: dict = {}
 
 
 @app.get("/api/v1/settings/lab")
-def get_lab_settings():
+def get_lab_settings(current_user=Depends(require_admin)):
+    """Admin-only: returns lab configuration including reCAPTCHA and notification state."""
     from backend.app.services import notification_service
     return {
         "lab_name":     _lab_settings_overlay.get("lab_name",     settings.LAB_NAME),
@@ -224,6 +247,16 @@ def get_lab_settings():
         "email_notifications_enabled": notification_service.EMAIL_NOTIFICATIONS_ENABLED,
         "recaptcha_site_key": settings.RECAPTCHA_SITE_KEY,
         "recaptcha_enabled": settings.ENABLE_RECAPTCHA,
+    }
+
+
+@app.get("/api/v1/settings/lab/public")
+def get_lab_settings_public():
+    """Public endpoint: returns only the minimal info needed for the login page (reCAPTCHA)."""
+    return {
+        "recaptcha_site_key": settings.RECAPTCHA_SITE_KEY,
+        "recaptcha_enabled": settings.ENABLE_RECAPTCHA,
+        "lab_name": _lab_settings_overlay.get("lab_name", settings.LAB_NAME),
     }
 
 

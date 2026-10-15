@@ -37,7 +37,16 @@ def create_staff(payload: StaffCreate, background_tasks: BackgroundTasks, admin=
 def get_staff(staff_id: str, current_user=Depends(get_current_user),
               db: Session = Depends(get_db)):
     import uuid
-    return staff_service.get_staff(db, uuid.UUID(staff_id))
+    from fastapi import HTTPException
+    from backend.app.models.user import RoleEnum
+
+    target_uuid = uuid.UUID(staff_id)
+    if current_user.role != RoleEnum.admin and current_user.id != target_uuid:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to view this staff member's profile"
+        )
+    return staff_service.get_staff(db, target_uuid)
 
 
 @router.patch("/{staff_id}")

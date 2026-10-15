@@ -11,7 +11,6 @@ This file:
 import os
 import sys
 import subprocess
-import asyncio
 from pathlib import Path
 
 # Ensure the project root is on Python path
@@ -36,6 +35,14 @@ def check_database():
     try:
         import sqlalchemy as sa
         db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            print("  [WARN] DATABASE_URL is not set")
+            return False
+        if db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+            db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        if "supabase" in db_url and "sslmode" not in db_url:
+            separator = "&" if "?" in db_url else "?"
+            db_url = f"{db_url}{separator}sslmode=require"
         engine = sa.create_engine(db_url, pool_pre_ping=True)
         with engine.connect() as conn:
             conn.execute(sa.text("SELECT 1"))

@@ -178,3 +178,13 @@ uploads/
 *.csv
 temp/
 node_modules/
+
+# Databases & local test artifacts
+*.db
+*.sqlite
+*.sqlite3
+backend/app.db
+tests/
+backend/tests/
+seed_patients.py
+backend/seed_patients.py

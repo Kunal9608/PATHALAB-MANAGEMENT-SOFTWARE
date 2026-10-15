@@ -24,7 +24,8 @@ class PushToBottom(Spacer):
         Spacer.__init__(self, 1, 1)
         self.required_space = required_space_for_footer
 
-    def wrap(self, availWidth, availHeight):
+    def wrap(self, aW, aH):
+        availWidth, availHeight = aW, aH
         if availHeight < self.required_space:
             self.height = availHeight  # Force a page break
         else:
@@ -178,6 +179,7 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
     ]
 
     demo_table = Table(demo_data, colWidths=[90, 171, 95, 167])
+    # pyrefly: ignore [bad-argument-type]
     demo_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F9F9F9')),
         ('BOX', (0, 0), (-1, -1), 0.5, border_color),
@@ -235,6 +237,7 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
             ('LEFTPADDING', (0, 0), (-1, -1), 4),
             ('RIGHTPADDING', (0, 0), (-1, -1), 4),
         ]
+        # pyrefly: ignore [bad-argument-type]
         t.setStyle(TableStyle(t_style))
         story.append(t)
 

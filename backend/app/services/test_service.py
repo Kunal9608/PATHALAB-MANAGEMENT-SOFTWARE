@@ -41,6 +41,11 @@ def create_test(db: Session, name: str, price: float,
                       entity_type="test", entity_id=test.id,
                       after={"name": name, "price": price})
     db.commit()
+    try:
+        from backend.app.core import copilot_cache
+        copilot_cache.invalidate_test_sync(str(test.test_code) if test and getattr(test, 'test_code', None) else None)
+    except Exception:
+        pass
     return _test_to_dict(test)
 
 
@@ -59,6 +64,11 @@ def update_test(db: Session, test_id: uuid.UUID, payload, actor_id: uuid.UUID) -
                           before={"price": old_price}, after={"price": new_price})
 
     db.commit()
+    try:
+        from backend.app.core import copilot_cache
+        copilot_cache.invalidate_test_sync(str(test.test_code) if test and getattr(test, 'test_code', None) else None)
+    except Exception:
+        pass
     return _test_to_dict(test)
 
 
@@ -134,6 +144,8 @@ def update_doctor(db: Session, doctor_id: uuid.UUID, payload, actor_id: uuid.UUI
     }
     updates = payload.model_dump(exclude_none=True)
     updated = test_repo.update_doctor(db, doctor_id, **updates)
+    if not updated:
+        raise ValueError("Doctor not found")
     audit_service.log(db, "doctor.edit", actor_user_id=actor_id,
                       entity_type="doctor", entity_id=doctor_id,
                       before=before, after=updates)

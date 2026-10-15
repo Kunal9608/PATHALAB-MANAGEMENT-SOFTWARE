@@ -175,7 +175,9 @@ def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
 
     user = user_repo.get_by_email(db, email)
     if not user:
-        raise ValueError("Email is not registered")
+        # Prevent account enumeration: return True silently without creating OTP or revealing email absence
+        logger.info(f"OTP request for unregistered email suppressed: {email}")
+        return True
 
     otp = generate_otp()
     otp_hash_val = hash_otp(otp)

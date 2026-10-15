@@ -165,8 +165,8 @@ def deactivate_staff(db: Session, staff_id: uuid.UUID, actor_user_id: uuid.UUID)
 def list_staff(
     db: Session,
     include_inactive: bool = False,
-    q: str = None,
-    is_active=None,
+    q: Optional[str] = None,
+    is_active: Optional[bool] = None,
     page: int = 1,
     page_size: int = 20,
 ):
@@ -201,8 +201,8 @@ def _user_to_dict(user) -> dict:
         "email": user.email,
         "mobile": user.mobile,
         "dob": user.dob.isoformat() if user.dob else None,
-        "role": user.role,
-        "view_scope": user.view_scope,
+        "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
+        "view_scope": user.view_scope.value if hasattr(user.view_scope, 'value') else str(user.view_scope),
         "face_registered": user.face_registered,
         "is_active": user.is_active,
         "aadhar_last4": user.aadhar_last4,
@@ -213,7 +213,7 @@ def _user_to_dict(user) -> dict:
 
 def backfill_staff_codes(db: Session):
     from datetime import datetime
-    staff_members = db.query(User).filter(User.role == RoleEnum.staff).filter((User.staff_code == None) | (User.staff_code == "")).all()
+    staff_members = db.query(User).filter(User.role == RoleEnum.staff).filter((User.staff_code.is_(None)) | (User.staff_code == "")).all()
     if not staff_members:
         return
     current_year = datetime.now().year

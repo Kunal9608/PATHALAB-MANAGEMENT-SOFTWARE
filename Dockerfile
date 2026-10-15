@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies required for WeasyPrint, ReportLab, PostgreSQL client/healthcheck, and general usage
+# Install system dependencies required for WeasyPrint, ReportLab, PostgreSQL client/healthcheck, and Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
@@ -30,7 +30,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     curl \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
+
+# Install official Node.js 20 LTS for internal WhatsApp Baileys microservice
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file first to leverage Docker cache
 COPY requirements.txt /app/
@@ -39,11 +47,26 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Install WhatsApp microservice Node dependencies
+WORKDIR /app/WHATSAPP/service
+COPY WHATSAPP/service/package*.json ./
+RUN npm install --omit=dev
+
+# Return to main app directory
+WORKDIR /app
+
 # Copy the rest of the application code
 COPY . /app/
 
-# Expose the API port
-EXPOSE 8000
+# Ensure session directory exists and scripts are executable with pure Unix LF line endings
+RUN sed -i 's/\r$//' /app/start.sh && \
+    chmod +x /app/start.sh && \
+    mkdir -p /app/WHATSAPP/session
 
-# Run the single entry point bootstrap script
-CMD ["python", "main.py"]
+# Expose the API port and internal WhatsApp microservice port
+EXPOSE 8000 3001
+
+
+# Run the startup script that starts both WhatsApp microservice and FastAPI
+CMD ["/app/start.sh"]
+

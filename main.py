@@ -86,6 +86,44 @@ def run_migrations():
     except Exception as e:
         print(f"  [WARN] Could not run migrations: {e}")
 
+def start_whatsapp_microservice():
+    """Starts internal Node.js WhatsApp microservice if enabled and not already running."""
+    if os.getenv("WHATSAPP_ENABLED", "true").lower() == "false":
+        print("  [SKIP] WhatsApp microservice disabled in configuration")
+        return
+
+    whatsapp_dir = ROOT / "WHATSAPP" / "service"
+    server_script = whatsapp_dir / "src" / "server.js"
+    if not server_script.exists():
+        return
+
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            if s.connect_ex(("127.0.0.1", 3001)) == 0:
+                print("  [OK] WhatsApp microservice is already running on port 3001")
+                return
+    except Exception:
+        pass
+
+    import shutil
+    node_bin = shutil.which("node")
+    if not node_bin:
+        print("  [WARN] Node.js not found in PATH — WhatsApp microservice cannot auto-start")
+        return
+
+    try:
+        proc = subprocess.Popen(
+            [node_bin, str(server_script)],
+            cwd=str(ROOT)
+        )
+        import atexit
+        atexit.register(lambda: proc.terminate() if proc.poll() is None else None)
+        print(f"  [OK] WhatsApp microservice started in background (PID: {proc.pid}) on port 3001")
+    except Exception as e:
+        print(f"  [WARN] Could not auto-start WhatsApp microservice: {e}")
+
 def main():
     print("\n" + "="*60)
     print("  Akriti Diagnostics Center — Lab Management System")
@@ -95,9 +133,11 @@ def main():
     check_env()
     db_ok = check_database()
     redis_ok = check_redis()
+    start_whatsapp_microservice()
 
     if db_ok:
         run_migrations()
+
         try:
             from backend.seed.seed import seed
             seed()

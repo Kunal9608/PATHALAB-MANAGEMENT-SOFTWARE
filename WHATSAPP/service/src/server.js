@@ -138,4 +138,13 @@ const shutdown = async () => {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
+// Prevent unhandled Baileys / socket errors from crashing the Node.js process
+process.on('uncaughtException', (err) => {
+  console.error('[WhatsApp Uncaught Exception]:', err.message || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[WhatsApp Unhandled Rejection]:', reason);
+});
+
 module.exports = { app, server };

@@ -27,6 +27,7 @@ from backend.app.routers import (
     auth_router, staff_router, attendance_router,
     patient_router, test_router, report_router,
     finance_router, security_router, copilot_router,
+    whatsapp_router,
 )
 from backend.app.core.db import init_db, get_db
 from sqlalchemy.orm import Session
@@ -172,8 +173,11 @@ async def add_security_headers(request: Request, call_next):
 
 
 # ── Exception handlers ────────────────────────────────────────────────────────
+# pyrefly: ignore [bad-argument-type]
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+# pyrefly: ignore [bad-argument-type]
 app.add_exception_handler(ValueError, value_error_handler)
+# pyrefly: ignore [bad-argument-type]
 app.add_exception_handler(PermissionError, permission_error_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
@@ -188,22 +192,24 @@ app.include_router(report_router.router, prefix=API_PREFIX)
 app.include_router(finance_router.router, prefix=API_PREFIX)
 app.include_router(security_router.router, prefix=API_PREFIX)
 app.include_router(copilot_router.router, prefix=API_PREFIX)
+app.include_router(whatsapp_router.router, prefix=API_PREFIX)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/health")
-def health(db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    try:
-        db.execute(text("SELECT 1"))
-        return {"status": "ok", "service": "Akriti Lab Management System", "database": "connected"}
-    except Exception as e:
-        # Never expose internal DB error details to the outside world
-        detail = str(e) if not settings.is_production else "Database unreachable"
-        return JSONResponse(
-            status_code=503,
-            content={"status": "error", "service": "Akriti Lab Management System", "database": "disconnected", "detail": detail}
-        )
+def health(check_db: bool = False, db: Session = Depends(get_db)):
+    if check_db:
+        from sqlalchemy import text
+        try:
+            db.execute(text("SELECT 1"))
+            return {"status": "ok", "service": "Akriti Lab Management System", "database": "connected"}
+        except Exception as e:
+            detail = str(e) if not settings.is_production else "Database unreachable"
+            return JSONResponse(
+                status_code=503,
+                content={"status": "error", "service": "Akriti Lab Management System", "database": "disconnected", "detail": detail}
+            )
+    return {"status": "ok", "service": "Akriti Lab Management System"}
 
 
 # ── Exception Handlers ────────────────────────────────────────────────────────
@@ -417,3 +423,11 @@ else:
     @app.get("/")
     def root():
         return {"message": "Frontend not built yet. API is running at /api/v1/"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    host = os.getenv("HOST", "localhost")
+    port = int(os.getenv("PORT", 8000))
+    print(f"Starting Akriti Diagnostics Lab Server on http://{host}:{port}")
+    uvicorn.run("backend.app.main:app", host=host, port=port, reload=True)

@@ -120,10 +120,14 @@ def upload_report(db: Session, patient_id: uuid.UUID, file_bytes: bytes,
     except Exception:
         pass
 
-    # Notify using BackgroundTasks (fire-and-forget) — attach the PDF
+    # Notify using BackgroundTasks (fire-and-forget)
     from backend.app.config import settings
     recipient = settings.MAIL_FROM or settings.MAIL_USERNAME or "lab@akriti.com"
     attachment_name = f"report_{patient.patient_code}.pdf"
+    reg_date_str = (
+        patient.sample_date.strftime("%d %b %Y") if patient.sample_date
+        else (patient.created_at.strftime("%d %b %Y") if getattr(patient, "created_at", None) else "")
+    )
     background_tasks.add_task(
         notification_service.notify,
         "report_ready",
@@ -131,9 +135,12 @@ def upload_report(db: Session, patient_id: uuid.UUID, file_bytes: bytes,
         {
             "patient_name": patient.name,
             "patient_code": patient.patient_code,
+            "age": patient.age,
+            "registered_date": reg_date_str,
             "attachment_bytes": file_bytes,
             "attachment_name": attachment_name,
             "mobile": patient.mobile,
+            "report_id": str(report.id),
         }
     )
 

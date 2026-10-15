@@ -65,7 +65,8 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
     if times:
         start_time = times.pop(-1)
         duration = time.time() - start_time
-        if duration > 0.2:  # Log slow queries exceeding 200ms
+        clean_stmt = statement.strip()
+        if duration > 2.5 and not clean_stmt.startswith("SELECT 1"):  # Log actual slow queries exceeding 2.5s
             logger.warning(
                 f"SLOW SQL [{duration:.3f}s]: {statement[:200]} | params: {str(parameters)[:100]}"
             )

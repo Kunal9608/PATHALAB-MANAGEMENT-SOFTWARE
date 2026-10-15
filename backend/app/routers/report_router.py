@@ -409,3 +409,86 @@ def submit_report_entry(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{report_id}/send-whatsapp")
+def send_report_whatsapp(
+    report_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Release and deliver the official PDF report to the patient via WhatsApp."""
+    from backend.app.models.report import Report
+    from backend.app.repositories import patient_repo
+    from backend.app.services import notification_service
+    from backend.app.config import settings
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    patient = patient_repo.get_by_id(db, report.patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    check_patient_access(current_user, patient)
+
+    if not patient.mobile:
+        raise HTTPException(status_code=400, detail="Patient has no registered mobile number")
+
+    file_bytes = None
+    if report.file_path.startswith("supabase:"):
+        parts = report.file_path.replace("supabase:", "").split("/", 1)
+        if len(parts) == 2:
+            bucket_name, file_path_in_bucket = parts
+            from supabase import create_client
+            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+            try:
+                file_bytes = supabase.storage.from_(bucket_name).download(file_path_in_bucket)
+            except Exception as e:
+                raise HTTPException(status_code=404, detail=f"Report file not found in Supabase: {e}")
+    else:
+        if not os.path.exists(report.file_path):
+            raise HTTPException(status_code=404, detail="Report file not found on disk")
+        with open(report.file_path, "rb") as f:
+            file_bytes = f.read()
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Unable to retrieve report document bytes")
+
+    filename = report.original_filename or f"Report_{patient.patient_code}.pdf"
+
+    background_tasks.add_task(
+        notification_service.notify,
+        "report_released",
+        patient.mobile,
+        {
+            "patient_name": patient.name,
+            "patient_code": patient.patient_code,
+            "attachment_bytes": file_bytes,
+            "attachment_name": filename,
+            "mobile": patient.mobile,
+        }
+    )
+
+    audit_service.log(
+        db,
+        action="report.release_whatsapp",
+        actor_user_id=current_user.id,
+        entity_type="report",
+        entity_id=report.id,
+        after={
+            "patient_id": str(patient.id),
+            "patient_code": patient.patient_code,
+            "mobile": patient.mobile,
+            "report_id": str(report.id),
+            "filename": filename
+        }
+    )
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Report PDF dispatched to patient WhatsApp (+91 {patient.mobile}) successfully."
+    }
+

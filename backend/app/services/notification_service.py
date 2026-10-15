@@ -25,8 +25,9 @@ class NotificationProvider(ABC):
 class EmailProvider(NotificationProvider):
     def send(self, event_type: str, recipient_email: str, context: Dict[str, Any]) -> bool:
         try:
-            from backend.app.config import settings
-            
+            if not recipient_email or "@" not in str(recipient_email):
+                return False
+
             # --- BREVO CONFIG CHECK ---
             if not settings.BREVO_API_KEY:
                 print("  [BREVO WARNING] Brevo API Key not configured — settings.BREVO_API_KEY is empty")
@@ -247,109 +248,131 @@ class WhatsAppProvider(NotificationProvider):
     def send(self, event_type: str, recipient_email: str, context: Dict[str, Any]) -> bool:
         try:
             from backend.app.config import settings
+            from backend.app.services.whatsapp_service import whatsapp_service
 
-            # --- WASENDER CONFIG CHECK ---
-            if not settings.WASENDER_API_KEY:
-                print("  [WASENDER WARNING] WASender API Key not configured — settings.WASENDER_API_KEY is empty")
-                logger.warning("WASender API Key not configured — skipping notification")
+            if not settings.WHATSAPP_ENABLED:
+                logger.info("WhatsApp notifications disabled in settings — skipping")
                 return False
 
-            # Recipient should be a phone number. In context.get("mobile") we might have a cleaner mobile.
             mobile = context.get("mobile") or recipient_email
             if not mobile:
                 logger.warning("No recipient mobile number provided — skipping WhatsApp notification")
                 return False
 
-            # Clean non-digits
-            mobile = "".join(filter(str.isdigit, str(mobile)))
-            if len(mobile) == 10:
-                mobile = "91" + mobile
-
-            # We need to map event type to message template
-            templates = {
-                "patient_registered": "Hello {patient_name}, you have been successfully registered at Akriti Diagnostics Center. Your Patient ID is {patient_code}.",
-                "status_update": "Dear {patient_name}, the status of your lab report (ID: {patient_code}) has been updated to: {status}.",
-                "report_ready": "Dear {patient_name}, your diagnostic lab report for Patient ID {patient_code} is ready.",
-            }
-
-            if event_type not in templates:
-                logger.warning(f"Unhandled WhatsApp event type: {event_type}")
+            clean_mobile = "".join(filter(str.isdigit, str(mobile)))
+            if not clean_mobile:
                 return False
 
-            text_message = templates[event_type].format(
-                patient_name=context.get("patient_name", "Patient"),
-                patient_code=context.get("patient_code", ""),
-                status=context.get("status", "").replace("_", " ").upper() if context.get("status") else ""
-            )
+            patient_name = context.get("patient_name", "Patient")
+            patient_code = context.get("patient_code", "")
 
-            attachment_bytes = context.get("attachment_bytes")
-            attachment_name = context.get("attachment_name", "document.pdf")
+            # 1. Report Ready Event — TEXT NOTIFICATION ONLY (No PDF attached)
+            if event_type == "report_ready":
+                age = context.get("age", "")
+                age_str = f"• Age: *{age} yrs*\n" if age else ""
+                reg_date = context.get("registered_date", "")
+                date_str = f"• Registered Date: *{reg_date}*\n" if reg_date else ""
 
-            headers = {
-                "Authorization": f"Bearer {settings.WASENDER_API_KEY}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
+                text = (
+                    f"*{settings.LAB_NAME}*\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🔔 *Diagnostic Report Ready*\n\n"
+                    f"Dear *{patient_name}*,\n"
+                    f"Your diagnostic test report is now *READY*.\n\n"
+                    f"📋 *Patient Details:*\n"
+                    f"• Patient ID: *{patient_code}*\n"
+                    f"• Name: *{patient_name}*\n"
+                    f"{age_str}"
+                    f"{date_str}\n"
+                    f"📢 *Important Notice:*\n"
+                    f"Your report is ready, please collect your printed report from our lab staff / reception desk.\n\n"
+                    f"Thank you for choosing *{settings.LAB_NAME}*!"
+                )
+                return whatsapp_service.send_text(
+                    clean_mobile,
+                    text,
+                    idempotency_key=f"report_ready:{patient_code}:{clean_mobile}"
+                )
 
-            # If there's an attachment, we upload it first to get a public URL
-            document_url = None
-            if attachment_bytes:
-                encoded_bytes = base64.b64encode(attachment_bytes).decode("utf-8")
-                upload_payload = {
-                    "mimetype": "application/pdf",
-                    "base64": f"data:application/pdf;base64,{encoded_bytes}"
-                }
-                
-                try:
-                    resp = httpx.post(
-                        "https://wasenderapi.com/api/upload",
-                        json=upload_payload,
-                        headers=headers,
-                        timeout=15.0
-                    )
-                    resp.raise_for_status()
-                    resp_data = resp.json()
-                    if resp_data.get("success"):
-                        document_url = resp_data.get("publicUrl")
-                        logger.info(f"WASender upload success: {document_url}")
-                    else:
-                        logger.error(f"WASender upload failed: {resp_data}")
-                        return False
-                except Exception as e:
-                    logger.error(f"WASender upload exception: {e}")
-                    return False
+            # 1b. Report Released Event — DISPATCH OFFICIAL PDF DOCUMENT
+            elif event_type == "report_released":
+                attachment_bytes = context.get("attachment_bytes")
+                attachment_name = context.get("attachment_name", f"Report_{patient_code}.pdf")
+                return whatsapp_service.send_report(
+                    mobile=clean_mobile,
+                    patient_name=patient_name,
+                    patient_code=patient_code,
+                    pdf_bytes=attachment_bytes,
+                    file_name=attachment_name
+                )
 
-            # Prepare payload for send-message
-            payload = {
-                "to": f"+{mobile}",
-                "text": text_message
-            }
+            # 2. Patient Registration Event — SEND NAME, NUMBER, AGE, PATIENT ID, BILL AMOUNT
+            elif event_type == "patient_registered":
+                mobile_no = context.get("mobile", clean_mobile)
+                age = context.get("age", "")
+                age_str = f"• Age: *{age} yrs*\n" if age else ""
+                reg_date = context.get("registered_date", "")
+                date_str = f"• Date: *{reg_date}*\n" if reg_date else ""
 
-            if document_url:
-                payload["documentUrl"] = document_url
-                payload["fileName"] = attachment_name
+                total_amt = context.get("total_amount")
+                paid_amt = context.get("amount_paid")
+                due_amt = context.get("due_amount")
 
-            resp = httpx.post(
-                "https://wasenderapi.com/api/send-message",
-                json=payload,
-                headers=headers,
-                timeout=15.0
-            )
-            resp.raise_for_status()
-            resp_data = resp.json()
-            logger.info(f"WASender send-message response: {resp_data}")
+                billing_lines = ""
+                if total_amt is not None:
+                    billing_lines = f"• Total Bill Amount: *₹{float(total_amt):,.2f}*\n"
+                    if paid_amt is not None and float(paid_amt) > 0:
+                        billing_lines += f"• Amount Paid: *₹{float(paid_amt):,.2f}*\n"
+                    if due_amt is not None and float(due_amt) > 0:
+                        billing_lines += f"• Balance Due: *₹{float(due_amt):,.2f}*\n"
 
-            print(f"  [WASENDER OK] WhatsApp sent successfully: {event_type} -> {mobile}")
-            return True
+                text = (
+                    f"*{settings.LAB_NAME}*\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"✅ *Registration Successful!*\n\n"
+                    f"Hello *{patient_name}*,\n"
+                    f"You have been successfully registered with our lab.\n\n"
+                    f"📋 *Registration Details:*\n"
+                    f"• Patient ID: *{patient_code}*\n"
+                    f"• Name: *{patient_name}*\n"
+                    f"• Mobile: *{mobile_no}*\n"
+                    f"{age_str}"
+                    f"{date_str}"
+                    f"{billing_lines}\n"
+                    f"We will notify you on WhatsApp as soon as your diagnostic report is ready.\n\n"
+                    f"Thank you for choosing *{settings.LAB_NAME}*!"
+                )
+                return whatsapp_service.send_text(
+                    clean_mobile,
+                    text,
+                    idempotency_key=f"registered:{patient_code}:{clean_mobile}"
+                )
 
-        except httpx.HTTPStatusError as he:
-            logger.error(f"WASender HTTP Error: {he.response.status_code} - {he.response.text}")
-            print(f"  [WASENDER HTTP ERROR] Code: {he.response.status_code}, Detail: {he.response.text}")
-            return False
+            # 3. Status Update Event
+            elif event_type == "status_update":
+                status = context.get("status", "").replace("_", " ").upper()
+                text = (
+                    f"*{settings.LAB_NAME}*\n\n"
+                    f"Dear *{patient_name}*,\n"
+                    f"The status of your sample (Patient ID: *{patient_code}*) is now: *{status}*."
+                )
+                return whatsapp_service.send_text(
+                    clean_mobile,
+                    text,
+                    idempotency_key=f"status:{patient_code}:{status}:{clean_mobile}"
+                )
+
+            # 4. OTP Event
+            elif event_type == "otp":
+                otp_code = context.get("otp", "")
+                return whatsapp_service.send_otp(clean_mobile, otp_code, name=patient_name)
+
+            else:
+                logger.warning(f"Unhandled WhatsApp notification event: {event_type}")
+                return False
+
         except Exception as e:
-            logger.error(f"WASender error: {e}")
-            print(f"  [WASENDER ERROR] {e}")
+            logger.error(f"WhatsApp notification provider error: {e}")
             return False
 
 
@@ -364,6 +387,7 @@ PROVIDER_REGISTRY: Dict[str, list] = {
     "otp": [EmailProvider()],
     "password_reset": [EmailProvider()],
     "report_ready": [EmailProvider(), WhatsAppProvider()],
+    "report_released": [EmailProvider(), WhatsAppProvider()],
     "welcome_staff": [EmailProvider()],
     "password_change": [EmailProvider()],
     "delete_verify": [EmailProvider()],

@@ -31,6 +31,30 @@ services:
       timeout: 5s
       retries: 5
 
+  whatsapp:
+    build:
+      context: .
+      dockerfile: WHATSAPP/Dockerfile
+    container_name: akriti_whatsapp_service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      - WHATSAPP_SERVICE_PORT=3001
+      - WHATSAPP_SERVICE_HOST=0.0.0.0
+      - WHATSAPP_SESSION_PATH=WHATSAPP/session
+      - WHATSAPP_ENABLED=true
+    volumes:
+      - ./WHATSAPP/session:/app/WHATSAPP/session
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   web:
     build:
       context: .
@@ -39,11 +63,14 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
       - WORKERS=${WORKERS:-2}
       - REDIS_URL=redis://redis:6379/0
+      - WHATSAPP_SERVICE_URL=http://whatsapp:3001
     volumes:
       - /app/venv/
       - /app/.venv/
@@ -60,6 +87,9 @@ services:
         required: false
       redis:
         condition: service_healthy
+        required: false
+      whatsapp:
+        condition: service_started
         required: false
 
 volumes:

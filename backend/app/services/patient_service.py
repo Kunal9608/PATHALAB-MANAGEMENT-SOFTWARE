@@ -133,6 +133,7 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
 
     # Insert patient_tests with price snapshot
     for test_id in payload.test_ids:
+        # pyrefly: ignore [bad-argument-type]
         patient_repo.add_patient_test(db, patient.id, test_id, price_map[str(test_id)])
 
     from backend.app.models.patient_status_history import PatientStatusHistory
@@ -147,11 +148,17 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
         db, "patient.create",
         actor_user_id=current_user_id,
         entity_type="patient",
+        # pyrefly: ignore [bad-argument-type]
         entity_id=patient.id,
         after={"patient_code": patient_code, "name": payload.name, "total": total_amount},
     )
 
     from backend.app.services import notification_service
+    tot_amt = float(total_amount)
+    paid_amt = float(getattr(patient, "amount_paid", None) or getattr(payload, "amount_paid", None) or 0)
+    due_amt = max(0.0, tot_amt - paid_amt)
+    reg_date_str = patient.sample_date.strftime("%d %b %Y") if patient.sample_date else date.today().strftime("%d %b %Y")
+
     background_tasks.add_task(
         notification_service.notify,
         "patient_registered",
@@ -159,6 +166,13 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
         {
             "patient_name": patient.name,
             "patient_code": patient_code,
+            "mobile": patient.mobile,
+            "age": patient.age,
+            "gender": patient.gender.value if hasattr(patient.gender, 'value') else str(patient.gender),
+            "total_amount": tot_amt,
+            "paid_amount": paid_amt,
+            "due_amount": due_amt,
+            "registered_date": reg_date_str,
         }
     )
 
@@ -186,6 +200,7 @@ def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdate,
     new_test_ids = payload.test_ids if payload.test_ids is not None else [t.test_id for t in (patient.patient_tests or [])]
 
     if payload.mobile is not None or payload.sample_date is not None or payload.test_ids is not None:
+        # pyrefly: ignore [bad-argument-type]
         _check_duplicates(db, new_mobile, new_sample_date, new_test_ids, exclude_patient_id=patient.id, force_duplicate=payload.force_duplicate)
 
     # Remove force_duplicate from update_data so it doesn't try to save it to DB
@@ -354,7 +369,9 @@ def export_patients_csv(db: Session, date_from: Optional[date], date_to: Optiona
 
         # yield_per prevents loading all rows into memory simultaneously
         for p in query.yield_per(1000):
+            # pyrefly: ignore [bad-argument-type]
             disc = float(p.discount_amount or 0)
+            # pyrefly: ignore [bad-argument-type]
             net_paid = float(p.amount_paid or 0)
             due = float(p.amount_due or 0)
             date_val = p.sample_date or (p.created_at.date() if p.created_at else None)

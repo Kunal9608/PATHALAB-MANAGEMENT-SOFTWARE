@@ -172,6 +172,18 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
 
+    # WhatsApp Integration Service
+    WHATSAPP_ENABLED: bool = True
+    WHATSAPP_SERVICE_URL: str = "http://127.0.0.1:3001"
+    WHATSAPP_SERVICE_PORT: int = 3001
+    WHATSAPP_SERVICE_TOKEN: str = "pathlab_wa_sec_token_9f83a21b47c0e6"
+    WHATSAPP_SESSION_PATH: str = "WHATSAPP/session"
+    WHATSAPP_OTP_EXPIRY_SECONDS: int = 300
+    WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    WHATSAPP_MAX_OTP_ATTEMPTS: int = 3
+    WHATSAPP_MESSAGE_TIMEOUT_SECONDS: int = 15
+    WHATSAPP_MAX_RETRIES: int = 3
+
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"
 

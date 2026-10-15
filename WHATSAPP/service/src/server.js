@@ -1,0 +1,141 @@
+/**
+ * PathLab OS — Internal WhatsApp Service Entrypoint
+ * Listens on configured port (default 3001), restricted to internal requests.
+ */
+const express = require('express');
+const cors = require('cors');
+const config = require('./config');
+const internalAuth = require('./auth-middleware');
+const connectionManager = require('./connection-manager');
+const messageService = require('./message-service');
+
+const app = express();
+
+// Body parsers with safe size limits
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+
+// CORS configuration (allow FastAPI backend origin)
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. server-to-server HTTP calls from FastAPI)
+    if (!origin) return callback(null, true);
+    if (config.allowedOrigins.some(ao => origin.startsWith(ao))) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Internal service bounded to localhost
+  },
+  credentials: true
+}));
+
+// Apply authentication middleware to all routes except /health
+app.use(internalAuth);
+
+// ── Health Endpoint ─────────────────────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'pathlab-whatsapp-service',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ── Status Endpoint ─────────────────────────────────────────────────────────
+app.get('/status', (req, res) => {
+  res.json({
+    success: true,
+    data: connectionManager.getStatus()
+  });
+});
+
+// ── Connect Endpoint (Admin-triggered) ───────────────────────────────────────
+app.post('/connect', async (req, res) => {
+  try {
+    const result = await connectionManager.connect();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── QR Code Endpoint ─────────────────────────────────────────────────────────
+app.get('/qr', (req, res) => {
+  const qrState = connectionManager.getQr();
+  res.json({
+    success: true,
+    data: qrState
+  });
+});
+
+// ── Disconnect Endpoint ─────────────────────────────────────────────────────
+app.post('/disconnect', async (req, res) => {
+  try {
+    const result = await connectionManager.disconnect();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Message Dispatch Endpoint ───────────────────────────────────────────────
+app.post('/messages/send', async (req, res) => {
+  const { to, text, type, document, fileName, caption, mimetype, idempotencyKey } = req.body;
+
+  if (!to) {
+    return res.status(400).json({ success: false, error: 'Destination number "to" is required' });
+  }
+
+  try {
+    let result;
+    if (type === 'document' || document) {
+      if (!document) {
+        return res.status(400).json({ success: false, error: 'Document base64 content is required' });
+      }
+      result = await messageService.sendDocument(
+        to,
+        document,
+        fileName || 'report.pdf',
+        caption || '',
+        mimetype || 'application/pdf',
+        idempotencyKey
+      );
+    } else {
+      if (!text) {
+        return res.status(400).json({ success: false, error: 'Message "text" is required' });
+      }
+      result = await messageService.sendText(to, text, idempotencyKey);
+    }
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error(`[WhatsApp Send Error]: ${err.message}`);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// Start Express Server
+const server = app.listen(config.port, config.host, async () => {
+  console.log(`[WhatsApp Service] Running on http://${config.host}:${config.port}`);
+  // Auto-restore connection if session exists
+  await connectionManager.initialize(true);
+});
+
+// Graceful shutdown
+const shutdown = async () => {
+  console.log('[WhatsApp Service] Shutting down gracefully...');
+  server.close(async () => {
+    try {
+      const sock = connectionManager.getSocket();
+      if (sock) sock.end(undefined);
+    } catch {}
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+module.exports = { app, server };

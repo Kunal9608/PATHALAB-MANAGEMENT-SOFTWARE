@@ -188,3 +188,11 @@ tests/
 backend/tests/
 seed_patients.py
 backend/seed_patients.py
+
+# WhatsApp Session & Service artifacts (NEVER commit credentials/sessions)
+WHATSAPP/session/*
+!WHATSAPP/session/.gitkeep
+WHATSAPP/service/node_modules/
+WHATSAPP/service/session/
+**/WHATSAPP/session/*
+!**/WHATSAPP/session/.gitkeep

@@ -34,50 +34,18 @@ Thumbs.db
 
 # Docker
 .dockerignore
-docker-compose.yml
-
-# Byte-compiled / optimized / DLL files
-**/__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Virtual Environments
-venv/
-.venv/
-env/
-ENV/
-
-# OS-specific files
-.DS_Store
-.DS_Store?
-._*
-Thumbs.db
-
-# IDEs and editors
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Local environment variables
-.env
-.env.*
-!.env.example
-
-# Git
-.git/
-.gitignore
-
-# Docker
-.dockerignore
-docker-compose.yml
 
 # Project uploads and generated files
 uploads/
+**/uploads/
 *.pdf
 *.xlsx
 *.csv
 temp/
 node_modules/
+**/node_modules/
+
+# WhatsApp session (mounted via docker-compose volume, do not bake into image)
+WHATSAPP/session/
+**/WHATSAPP/session/
+WHATSAPP/service/node_modules/

@@ -16,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from backend.app.core.limiter import limiter
 
 from backend.app.config import settings
-from backend.app.dependencies import require_admin
+from backend.app.dependencies import require_admin, get_current_user
 from backend.app.middleware.error_handler import (
     validation_exception_handler,
     value_error_handler,
@@ -241,8 +241,8 @@ _lab_settings_overlay: dict = {}
 
 
 @app.get("/api/v1/settings/lab")
-def get_lab_settings(current_user=Depends(require_admin)):
-    """Admin-only: returns lab configuration including reCAPTCHA and notification state."""
+def get_lab_settings(current_user=Depends(get_current_user)):
+    """Authenticated users (Admin & Staff): returns lab configuration including UPI VPA, name, address, etc."""
     from backend.app.services import notification_service
     return {
         "lab_name":     _lab_settings_overlay.get("lab_name",     settings.LAB_NAME),

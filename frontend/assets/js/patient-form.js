@@ -290,16 +290,21 @@ const PatientForm = (() => {
     if (qrSection) qrSection.style.display = '';
 
     // Fetch lab settings once and cache
-    if (!labSettingsCache) {
+    if (!labSettingsCache || !labSettingsCache.lab_upi_vpa) {
       try {
-        labSettingsCache = await API.get('/api/v1/settings/lab', { silent: true });
+        const fetched = await API.get('/api/v1/settings/lab', { silent: true });
+        if (fetched && fetched.lab_upi_vpa) {
+          labSettingsCache = fetched;
+        } else {
+          labSettingsCache = fetched || {};
+        }
       } catch {
-        labSettingsCache = {};
+        labSettingsCache = null;
       }
     }
 
-    const vpa     = labSettingsCache.lab_upi_vpa || '';
-    const labName = labSettingsCache.lab_name    || 'Akriti Diagnostics';
+    const vpa     = (labSettingsCache && labSettingsCache.lab_upi_vpa) || '';
+    const labName = (labSettingsCache && labSettingsCache.lab_name)    || 'Akriti Diagnostics';
 
     // Clear previous QR
     qrEl.innerHTML = '';
@@ -308,7 +313,7 @@ const PatientForm = (() => {
       qrEl.innerHTML = `
         <div style="text-align:center;padding:20px">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9A0002" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <p style="font-size:13px;color:var(--color-ink-muted);margin-top:8px">UPI VPA not configured.<br>Go to <strong>Settings → Lab UPI VPA</strong> to set it.</p>
+          <p style="font-size:13px;color:var(--color-ink-muted);margin-top:8px">UPI VPA not configured.<br>Contact Admin to configure Lab UPI VPA in Settings.</p>
         </div>`;
       return;
     }

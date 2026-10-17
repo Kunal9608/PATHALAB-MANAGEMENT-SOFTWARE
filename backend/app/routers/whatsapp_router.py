@@ -266,6 +266,7 @@ def verify_whatsapp_otp(payload: WhatsAppOtpVerify, db: Session = Depends(get_db
 
     expected_hash = _hash_otp(otp_code, mobile)
 
+    # pyrefly: ignore [no-matching-overload]
     if not otp_record or not hmac.compare_digest(expected_hash, otp_record.otp_hash):
         # Increment attempt counter
         if r:

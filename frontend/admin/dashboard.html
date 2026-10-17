@@ -130,6 +130,52 @@
   }
 
   // ── Revenue Chart ─────────────────────────────────────────────────────────
+  let revChartInstance = null;
+  let cachedRevData = null;
+
+  function renderRevenueChart() {
+    const canvas = document.getElementById('revenue-chart');
+    if (!canvas || !cachedRevData || typeof Chart === 'undefined') return;
+    if (revChartInstance) revChartInstance.destroy();
+    canvas.style.display = '';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    revChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: cachedRevData.map(d => {
+          const dt = new Date(d.period);
+          return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+        }),
+        datasets: [{
+          label: 'Revenue',
+          data: cachedRevData.map(d => d.revenue),
+          borderColor: isDark ? '#60A5FA' : '#0A192F',
+          backgroundColor: isDark ? 'rgba(96, 165, 250, 0.12)' : 'rgba(10, 25, 47, 0.06)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: isDark ? '#93C5FD' : '#0A192F',
+          fill: true,
+          tension: 0.3,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            grid: { color: isDark ? 'rgba(38, 54, 75, 0.6)' : 'rgba(226, 232, 240, 0.8)' },
+            ticks: { color: isDark ? '#B0BED0' : '#475569', callback: v => '₹' + v.toLocaleString('en-IN') }
+          },
+          x: {
+            grid: { color: isDark ? 'rgba(38, 54, 75, 0.4)' : 'rgba(226, 232, 240, 0.6)' },
+            ticks: { color: isDark ? '#B0BED0' : '#475569', maxTicksLimit: 10 }
+          },
+        },
+      },
+    });
+  }
+
   try {
     const today = new Date();
     const from  = new Date(today); from.setDate(today.getDate() - 29);
@@ -138,42 +184,49 @@
 
     const skel = document.getElementById('revenue-skel');
     if (skel) skel.style.display = 'none';
-    const canvas = document.getElementById('revenue-chart');
-    if (canvas && typeof Chart !== 'undefined') {
-      canvas.style.display = '';
-
-      new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels: rev.data.map(d => {
-            const dt = new Date(d.period);
-            return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-          }),
-          datasets: [{
-            label: 'Revenue',
-            data: rev.data.map(d => d.revenue),
-            borderColor: '#9A0002',
-            backgroundColor: 'rgba(154,0,2,0.07)',
-            borderWidth: 2,
-            pointRadius: 3,
-            pointBackgroundColor: '#9A0002',
-            fill: true,
-            tension: 0.3,
-          }],
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { ticks: { callback: v => '₹' + v.toLocaleString('en-IN') } },
-            x: { ticks: { maxTicksLimit: 10 } },
-          },
-        },
-      });
+    if (rev && rev.data) {
+      cachedRevData = rev.data;
+      renderRevenueChart();
     }
   } catch { const sk = document.getElementById('revenue-skel'); if (sk) sk.style.display = 'none'; }
 
   // ── Payment Split Chart ───────────────────────────────────────────────────
+  let splitChartInstance = null;
+  let cachedSplitData = null;
+
+  function renderSplitChart() {
+    const canvas = document.getElementById('split-chart');
+    if (!canvas || !cachedSplitData || typeof Chart === 'undefined') return;
+    if (splitChartInstance) splitChartInstance.destroy();
+    canvas.style.display = '';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    splitChartInstance = new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        labels: ['Cash', 'QR / UPI'],
+        datasets: [{
+          data: [cachedSplitData.cash_amount, cachedSplitData.qr_amount],
+          backgroundColor: isDark ? ['#0D9488', '#38BDF8'] : ['#0A192F', '#0284C7'],
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        cutout: '65%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              color: isDark ? '#F1F5F9' : '#0F172A',
+              font: { family: 'Inter', size: 12 }
+            }
+          },
+        },
+      },
+    });
+  }
+
   try {
     const today = new Date();
     const from  = new Date(today); from.setDate(1);
@@ -182,30 +235,17 @@
 
     const skel = document.getElementById('split-skel');
     if (skel) skel.style.display = 'none';
-    const canvas = document.getElementById('split-chart');
-    if (canvas && typeof Chart !== 'undefined') {
-      canvas.style.display = '';
-
-      new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-          labels: ['Cash', 'QR / UPI'],
-          datasets: [{
-            data: [split.cash_amount, split.qr_amount],
-            backgroundColor: ['#9A0002', '#3D6B7D'],
-            borderWidth: 0,
-          }],
-        },
-        options: {
-          responsive: true,
-          cutout: '65%',
-          plugins: {
-            legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 12 } } },
-          },
-        },
-      });
+    if (split) {
+      cachedSplitData = split;
+      renderSplitChart();
     }
   } catch { const sk = document.getElementById('split-skel'); if (sk) sk.style.display = 'none'; }
+
+  // Live theme switch re-render for charts
+  window.addEventListener('akriti-theme-change', () => {
+    renderRevenueChart();
+    renderSplitChart();
+  });
 
   // ── Recent Patients ───────────────────────────────────────────────────────
   const recentTable = new DataTable({

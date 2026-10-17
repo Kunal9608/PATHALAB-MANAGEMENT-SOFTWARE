@@ -53,6 +53,8 @@ const Theme = (() => {
       }
       btn.setAttribute('aria-label', theme === DARK ? 'Switch to light mode' : 'Switch to dark mode');
     });
+    // Dispatch custom event for charts or components that need to live-update
+    window.dispatchEvent(new CustomEvent('akriti-theme-change', { detail: { theme } }));
   }
 
   function toggle() {

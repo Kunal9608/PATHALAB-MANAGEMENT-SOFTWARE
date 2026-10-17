@@ -132,6 +132,7 @@
       const canvas = document.getElementById('daily-chart');
       canvas.style.display = '';
       if (dailyChart) dailyChart.destroy();
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       dailyChart = new Chart(canvas, {
         type: 'bar',
         data: {
@@ -139,14 +140,24 @@
           datasets: [{
             label: 'Revenue',
             data: rev.data.map(d => d.revenue),
-            backgroundColor: 'rgba(154,0,2,0.75)',
+            backgroundColor: isDark ? 'rgba(37, 99, 235, 0.85)' : 'rgba(10, 25, 47, 0.85)',
+            hoverBackgroundColor: isDark ? '#60A5FA' : '#172A45',
             borderRadius: 4,
           }],
         },
         options: {
           responsive: true,
           plugins: { legend: { display: false } },
-          scales: { y: { ticks: { callback: v => '₹' + v.toLocaleString('en-IN') } } },
+          scales: {
+            y: {
+              grid: { color: isDark ? 'rgba(38, 54, 75, 0.6)' : 'rgba(226, 232, 240, 0.8)' },
+              ticks: { color: isDark ? '#B0BED0' : '#475569', callback: v => '₹' + v.toLocaleString('en-IN') }
+            },
+            x: {
+              grid: { color: isDark ? 'rgba(38, 54, 75, 0.4)' : 'rgba(226, 232, 240, 0.6)' },
+              ticks: { color: isDark ? '#B0BED0' : '#475569' }
+            }
+          },
         },
       });
       const dtEl = document.getElementById('daily-total');
@@ -171,6 +182,7 @@
       if (!canvas || typeof Chart === 'undefined') return;
       canvas.style.display = '';
       if (monthlyChart) monthlyChart.destroy();
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       monthlyChart = new Chart(canvas, {
         type: 'bar',
         data: {
@@ -178,14 +190,24 @@
           datasets: [{
             label: 'Revenue',
             data: rev.data.map(d => d.revenue),
-            backgroundColor: 'rgba(154,0,2,0.75)',
+            backgroundColor: isDark ? 'rgba(37, 99, 235, 0.85)' : 'rgba(10, 25, 47, 0.85)',
+            hoverBackgroundColor: isDark ? '#60A5FA' : '#172A45',
             borderRadius: 4,
           }],
         },
         options: {
           responsive: true,
           plugins: { legend: { display: false } },
-          scales: { y: { ticks: { callback: v => '₹' + v.toLocaleString('en-IN') } } },
+          scales: {
+            y: {
+              grid: { color: isDark ? 'rgba(38, 54, 75, 0.6)' : 'rgba(226, 232, 240, 0.8)' },
+              ticks: { color: isDark ? '#B0BED0' : '#475569', callback: v => '₹' + v.toLocaleString('en-IN') }
+            },
+            x: {
+              grid: { color: isDark ? 'rgba(38, 54, 75, 0.4)' : 'rgba(226, 232, 240, 0.6)' },
+              ticks: { color: isDark ? '#B0BED0' : '#475569' }
+            }
+          },
         },
       });
     } catch { const sk = document.getElementById('monthly-skel'); if (sk) sk.style.display = 'none'; }
@@ -209,13 +231,30 @@
       if (!canvas || typeof Chart === 'undefined') return;
       canvas.style.display = '';
       if (splitChart) splitChart.destroy();
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       splitChart = new Chart(canvas, {
         type: 'doughnut',
         data: {
           labels: ['Cash', 'QR/UPI'],
-          datasets: [{ data: [split.cash_amount, split.qr_amount], backgroundColor: ['#9A0002','#3D6B7D'], borderWidth: 0 }],
+          datasets: [{
+            data: [split.cash_amount, split.qr_amount],
+            backgroundColor: isDark ? ['#0D9488', '#38BDF8'] : ['#0A192F', '#0284C7'],
+            borderWidth: 0
+          }],
         },
-        options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'bottom' } } },
+        options: {
+          responsive: true,
+          cutout: '60%',
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                color: isDark ? '#F1F5F9' : '#0F172A',
+                font: { family: 'Inter', size: 12 }
+              }
+            }
+          }
+        },
       });
       const splitDetail = document.getElementById('split-detail');
       if (splitDetail) {
@@ -273,6 +312,13 @@
 
   document.getElementById('daily-refresh').addEventListener('click', () => { loadDaily(); loadSplit(); });
   yearSel.addEventListener('change', loadMonthly);
+
+  // Live theme switch re-render for charts
+  window.addEventListener('akriti-theme-change', () => {
+    loadDaily();
+    loadMonthly();
+    loadSplit();
+  });
 
   loadDaily();
   loadMonthly();

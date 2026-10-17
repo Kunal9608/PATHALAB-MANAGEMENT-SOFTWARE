@@ -566,9 +566,81 @@
 }
 
 /* ── Dark mode adjustments ───────────────────────────────────────────────── */
-[data-theme="dark"] .sidebar { background: var(--color-surface); }
-[data-theme="dark"] .topbar  { background: var(--color-surface); }
-[data-theme="dark"] .nav-item:hover { background: rgba(239, 230, 221, 0.06); }
+[data-theme="dark"] .sidebar {
+  background: var(--surface-sidebar, #0F172A);
+  border-right-color: var(--border);
+}
+[data-theme="dark"] .topbar {
+  background: var(--surface-sidebar, #0F172A);
+  border-bottom-color: var(--border);
+}
+[data-theme="dark"] .nav-item:hover {
+  background: rgba(96, 165, 250, 0.08);
+  color: var(--ink);
+}
+[data-theme="dark"] .nav-item.active {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+[data-theme="dark"] .nav-item.active::before {
+  background: var(--accent);
+}
+[data-theme="dark"] .brand-mark {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+[data-theme="dark"] .sidebar-user:hover {
+  background: rgba(96, 165, 250, 0.08);
+}
+[data-theme="dark"] .topbar-search {
+  background: var(--surface-input);
+  border-color: var(--border);
+}
+[data-theme="dark"] .topbar-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+[data-theme="dark"] .topbar-btn {
+  border-color: var(--border);
+  color: var(--ink-muted);
+}
+[data-theme="dark"] .topbar-btn:hover {
+  background: var(--surface-elevated);
+  color: var(--ink);
+  border-color: var(--accent);
+}
+[data-theme="dark"] .login-shell {
+  background-color: var(--bg);
+  background-image: radial-gradient(ellipse at top, rgba(37, 99, 235, 0.12), transparent 70%);
+}
+[data-theme="dark"] .login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+[data-theme="dark"] .test-picker {
+  background: var(--surface-input);
+  border-color: var(--border);
+}
+[data-theme="dark"] .test-option {
+  border-bottom-color: var(--border);
+}
+[data-theme="dark"] .test-option:hover {
+  background: rgba(96, 165, 250, 0.08);
+}
+[data-theme="dark"] .test-option.selected {
+  background: var(--accent-tint);
+}
+[data-theme="dark"] .suggestion-card {
+  background: rgba(56, 189, 248, 0.1);
+  border-left-color: var(--color-info);
+  color: var(--ink);
+}
+[data-theme="dark"] .timeline-dot {
+  background: var(--surface-elevated);
+  border-color: var(--border);
+}
 
 /* ── Responsive & Typography Utilities ────────────────────────────────────── */
 .truncate-text {

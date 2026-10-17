@@ -36,6 +36,13 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* ── Mappings to align with components ───────────────── */
+  --surface-elevated:          #FFFFFF;
+  --surface-input:             #F8FAFC;
+  --surface-sidebar:           #FFFFFF;
+  --surface-table-header:      #F8FAFC;
+  --primary-action:            #0A192F;
+  --primary-action-hover:      #172A45;
+
   --color-bg:                  var(--bg);
   --color-surface:             var(--surface);
   --color-ink:                 var(--ink);
@@ -105,33 +112,73 @@
   --topbar-height: 60px;
 }
 
-/* ── Dark Theme ───────────────────────────────────────────────────────────── */
+/* ── Dark Theme (Premium Healthcare SaaS Palette) ───────────────────────── */
 [data-theme="dark"] {
-  --bg: #0B0F19;
-  --surface: #0F172A;
-  --ink: #F8FAFC;
-  --ink-muted: #94A3B8;
-  --ink-faint: #475569;
-  --border: #1E293B;
+  /* Application background: #0B1120 */
+  --bg: #0B1120;
+  /* Sidebar background: #0F172A */
+  --surface-sidebar: #0F172A;
+  /* Main surface: #111C2E */
+  --surface: #111C2E;
+  /* Elevated surface: #162338 */
+  --surface-elevated: #162338;
+  /* Input surface: #0D1728 */
+  --surface-input: #0D1728;
+  /* Table header: #142136 */
+  --surface-table-header: #142136;
   
-  --accent: #E2E8F0;
-  --accent-hover: #FFFFFF;
-  --accent-tint: #1E293B;
+  /* Primary text: #F1F5F9 */
+  --ink: #F1F5F9;
+  /* Secondary text: #B0BED0 */
+  --ink-muted: #B0BED0;
+  /* Muted text: #8798AE */
+  --ink-faint: #8798AE;
+  /* Subtle border: #26364B */
+  --border: #26364B;
+  
+  /* Primary accent: #60A5FA */
+  --accent: #60A5FA;
+  /* Accent hover: #93C5FD */
+  --accent-hover: #93C5FD;
+  --accent-tint: rgba(96, 165, 250, 0.12);
+
+  /* Primary action: #2563EB */
+  --primary-action: #2563EB;
+  --primary-action-hover: #3B82F6;
 
   --color-eosin: #F43F5E;
 
-  --color-success-tint: rgba(5, 150, 105, 0.18);
-  --color-error-tint: rgba(220, 38, 38, 0.18);
+  /* Restrained semantic colors */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --color-info: #38BDF8;
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--danger);
+
+  --color-success-tint: rgba(16, 185, 129, 0.15);
+  --color-warning-tint: rgba(245, 158, 11, 0.15);
+  --color-error-tint: rgba(239, 68, 68, 0.15);
+  --color-info-tint: rgba(56, 189, 248, 0.15);
+  
+  --color-bg:                  var(--bg);
+  --color-surface:             var(--surface);
+  --color-ink:                 var(--ink);
+  --color-ink-muted:           var(--ink-muted);
+  --color-ink-faint:           var(--ink-faint);
+  --color-border:              var(--border);
   
   --color-primary:             var(--accent);
   --color-primary-hover:       var(--accent-hover);
   --color-primary-tint:        var(--accent-tint);
   
-  --shadow-xs:  0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-sm:  0 2px 4px rgba(0, 0, 0, 0.45);
-  --shadow-md:  0 6px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg:  0 16px 36px rgba(0, 0, 0, 0.6);
-  --shadow-popover: 0 16px 40px rgba(0, 0, 0, 0.7);
+  --shadow-xs:  0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-sm:  0 2px 5px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md:  0 6px 18px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.45);
+  --shadow-lg:  0 16px 36px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-popover: 0 18px 42px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--border);
 }
 
 /* ── Reset & Base ────────────────────────────────────────────────────────── */

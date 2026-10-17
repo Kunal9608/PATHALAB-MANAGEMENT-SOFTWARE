@@ -37,21 +37,23 @@ It unifies a robust **FastAPI (Python)** backend with a hyper-fast, dependency-l
 
 | Feature Category | Capabilities & Highlights |
 | :--- | :--- |
-| **🤖 AI Copilot (Llama 3.1 8B)** | • Context-aware hospital assistant<br>• Real-time data querying (Revenue, Patient Count)<br>• Anti-hallucination guardrails & strict RBAC security |
-| **🏥 Patient Management** | • 5000+ concurrent registrations supported seamlessly<br>• Atomic PostgreSQL sequence-based Patient ID generation (`nextval`)<br>• Offline-first capabilities (PWA/Service Workers) |
-| **💳 Zero-Fee UPI Billing** | • Dynamic UPI QR code generation linked to exact bill amounts<br>• Zero transaction fee gateway bypassing<br>• Automated discount & balance tracking |
-| **🔬 Smart Reporting Lab** | • Pre-seeded 65+ master diagnostic tests (CBC, LFT, KFT, etc.)<br>• Auto-calculation of abnormal values against age/gender reference ranges<br>• Branded auto-PDF generation & manual PDF upload options |
-| **💬 Real-Time Delivery** | • Instant WhatsApp PDF delivery via WASender<br>• Brevo SMTP/Email integration for OTPs and official reports<br>• Secure digital SHA-256 hash verification links for authentic reports |
+| **🤖 AI Copilot (Groq / Llama 3.3 70B & Gemini)** | • Context-aware clinical assistant with conversational session memory<br>• Real-time data querying (Revenue, Patient Count, Turnaround Time)<br>• Anti-hallucination guardrails & strict RBAC security |
+| **🏥 Patient Management & Fast SPA** | • 5,000+ concurrent registrations supported seamlessly<br>• Instant SPA fast-navigation with automated script dependency loading<br>• Offline-first capabilities (IndexedDB / PWA Service Workers) |
+| **💳 Zero-Fee UPI Billing & QR** | • Real-time dynamic UPI QR code generation linked to exact bill amounts<br>• Role-aware lab configuration access (Admin & Staff QR support)<br>• Automated discount & balance tracking |
+| **🔬 Smart Reporting Lab** | • Pre-seeded 65+ master diagnostic tests (CBC, LFT, KFT, Lipid, etc.)<br>• Auto-calculation of abnormal values against age/gender reference ranges<br>• Responsive 3-action report drawer (View, Download, Instant WhatsApp Dispatch) |
+| **💬 Real-Time Delivery & Microservice** | • Native Baileys WhatsApp microservice for instant automated report PDF delivery<br>• Brevo SMTP/Email integration for OTPs and official reports<br>• Secure digital SHA-256 hash verification links for authentic reports |
 | **👤 Biometric Attendance** | • Real-time Face Recognition Check-in/Check-out kiosk<br>• Anti-spoofing liveness gating<br>• High-speed `pgvector` facial embedding search |
 
 ---
 
-## 🎨 Clinical Workbench UI (Design System)
+## 🎨 Clinical Workbench UI & Design System
 
-The frontend is not just a template; it's a proprietary **Clinical Workbench** tailored specifically for diagnostic laboratories:
-- **H&E Color Palette**: Inspired by histology stains — Primary Deep Nuclear Blue (`#0a192f`) and Critical Eosin Rose (`#C0392B`).
-- **Tabular Precision**: Clinical values, dates, and patient IDs are formatted in `IBM Plex Mono` for rapid vertical scanning by doctors.
-- **Sterile Surfaces**: Structured interfaces cast subtle diffuse shadows without glassmorphism noise for maximum clinical clarity.
+The frontend is a proprietary **Clinical Workbench** tailored specifically for diagnostic laboratories:
+- **Dual-Theme Architecture**: Seamless light & dark modes with controlled, persistent switching (Settings-integrated).
+  - *Light Mode*: Clinical nuclear deep blue (`#0a192f`) and sterile surfaces.
+  - *Dark Mode*: Premium high-contrast clinical dark palette (`#0B1120`, `#111C2E`, `#162338`) with soft blue accents (`#60A5FA`).
+- **Tabular Precision**: Clinical values, dates, and patient IDs are formatted in tabular monospace for rapid vertical scanning by doctors.
+- **Responsive Drawers**: Fully responsive report cards and action grids that seamlessly fit on all devices without layout distortion.
 
 ---
 

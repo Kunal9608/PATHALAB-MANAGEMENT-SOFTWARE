@@ -45,14 +45,20 @@ async def lifespan(app: FastAPI):
             print("  [FATAL] JWT_SECRET_KEY is using the default insecure value in production. Exiting.")
             sys.exit(1)
             
-    try:
-        init_db()
-    except Exception as e:
-        print(f"  [WARN] DB init: {e}")
-        if settings.is_production:
-            import sys
-            print("  [FATAL] Database initialization failed in production. Exiting to prevent silent failures.")
-            sys.exit(1)
+    for attempt in range(1, 4):
+        try:
+            init_db()
+            break
+        except Exception as e:
+            if attempt < 3:
+                import time
+                time.sleep(2)
+            else:
+                print(f"  [WARN] DB init: {e}")
+                if settings.is_production:
+                    import sys
+                    print("  [FATAL] Database initialization failed in production. Exiting to prevent silent failures.")
+                    sys.exit(1)
     yield
 
 

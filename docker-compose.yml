@@ -73,6 +73,9 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - WHATSAPP_SERVICE_URL=http://whatsapp:3001
       - START_INTERNAL_WHATSAPP=false
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     command: ["python", "main.py"]
     volumes:
       - .:/app

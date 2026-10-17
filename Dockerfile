@@ -58,15 +58,12 @@ WORKDIR /app
 # Copy the rest of the application code
 COPY . /app/
 
-# Ensure session directory exists and scripts are executable with pure Unix LF line endings
-RUN sed -i 's/\r$//' /app/start.sh && \
-    chmod +x /app/start.sh && \
-    mkdir -p /app/WHATSAPP/session
+# Ensure session directory exists
+RUN mkdir -p /app/WHATSAPP/session
 
-# Expose the API port and internal WhatsApp microservice port
-EXPOSE 8000 3001
+# Expose the API port
+EXPOSE 8000
 
-
-# Run the startup script that starts both WhatsApp microservice and FastAPI
-CMD ["/app/start.sh"]
+# Run the single entry point bootstrap script directly
+CMD ["python", "main.py"]
 

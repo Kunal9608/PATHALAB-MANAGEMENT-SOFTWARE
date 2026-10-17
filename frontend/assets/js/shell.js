@@ -370,14 +370,19 @@ const Shell = (() => {
       
       if (typeof flatpickr === 'undefined') {
         await new Promise((resolve) => {
+          const timeout = setTimeout(resolve, 2000);
           const script = document.createElement('script');
           script.src = 'https://cdn.jsdelivr.net/npm/flatpickr';
-          script.onload = resolve;
+          script.onload = () => { clearTimeout(timeout); resolve(); };
+          script.onerror = () => { clearTimeout(timeout); resolve(); };
           document.head.appendChild(script);
         });
       }
       
+      if (typeof flatpickr === 'undefined') return;
+
       document.querySelectorAll('input[type="date"]').forEach(input => {
+        if (input._flatpickr) return;
         input.type = 'text';
         flatpickr(input, {
           dateFormat: 'Y-m-d',
@@ -390,19 +395,70 @@ const Shell = (() => {
     }
   }
 
+  function showTopProgressBar() {
+    let bar = document.getElementById('spa-progress-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'spa-progress-bar';
+      bar.style.cssText = 'position:fixed;top:0;left:0;height:3px;background:var(--color-primary,#6D0001);z-index:999999;transition:width 0.2s ease, opacity 0.3s ease;width:0%;box-shadow:0 0 8px rgba(109,0,1,0.6);';
+      document.body.appendChild(bar);
+    }
+    bar.style.opacity = '1';
+    bar.style.width = '30%';
+    setTimeout(() => { if (bar.style.opacity === '1') bar.style.width = '70%'; }, 100);
+  }
+
+  function hideTopProgressBar() {
+    const bar = document.getElementById('spa-progress-bar');
+    if (bar) {
+      bar.style.width = '100%';
+      setTimeout(() => {
+        bar.style.opacity = '0';
+        setTimeout(() => { bar.style.width = '0%'; }, 300);
+      }, 150);
+    }
+  }
+
+  function isAppRoute(rawUrl) {
+    if (!rawUrl) return false;
+    try {
+      const u = new URL(rawUrl, window.location.href);
+      if (u.origin !== window.location.origin) return false;
+      const p = u.pathname.replace(/\/$/, '').replace(/\.html$/, '');
+      return p.startsWith('/admin') || p.startsWith('/staff') || p === '/profile';
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function navigate(url, { pushState = true } = {}) {
     if (!url) return;
-    const normTarget = url.split('#')[0].split('?')[0].replace(/\.html$/, '');
-    const normCurrent = window.location.pathname.replace(/\.html$/, '');
-    if (normTarget === normCurrent && !url.includes('?')) {
+
+    // Normalize target URL (strip origin, clean .html)
+    let cleanUrl = url;
+    try {
+      const parsed = new URL(url, window.location.href);
+      if (parsed.origin === window.location.origin) {
+        cleanUrl = parsed.pathname + parsed.search + parsed.hash;
+      }
+    } catch (_) {}
+    cleanUrl = cleanUrl.replace(/\.html(\?|#|$)/, '$1');
+
+    const normTarget = cleanUrl.split('#')[0].split('?')[0].replace(/\/$/, '');
+    const normCurrent = window.location.pathname.replace(/\.html$/, '').replace(/\/$/, '');
+    if (normTarget === normCurrent && !cleanUrl.includes('?')) {
+      document.getElementById('sidebar')?.classList.remove('open');
+      document.getElementById('sidebar-overlay')?.classList.remove('open');
       return;
     }
 
     if (_isNavigating) return;
     _isNavigating = true;
 
+    showTopProgressBar();
+
     try {
-      updateActiveNavLink(url);
+      updateActiveNavLink(cleanUrl);
 
       // Close mobile drawer if open
       document.getElementById('sidebar')?.classList.remove('open');
@@ -410,19 +466,28 @@ const Shell = (() => {
 
       const pageContent = document.querySelector('.page-content');
       if (pageContent) {
-        pageContent.innerHTML = getSkeletonLoaderHtml();
+        pageContent.style.transition = 'opacity 0.15s ease';
+        pageContent.style.opacity = '0.5';
       }
 
-      // Fetch new page HTML
-      let res = await fetch(url, { credentials: 'include' });
-      if (!res.ok && !url.endsWith('.html') && !url.includes('.')) {
-        const altUrl = url.includes('?') ? url.replace('?', '.html?') : `${url}.html`;
+      // Fetch clean URL first
+      let res = await fetch(cleanUrl, { credentials: 'include' });
+      if (!res.ok && !cleanUrl.endsWith('.html') && !cleanUrl.includes('.')) {
+        const altUrl = cleanUrl.includes('?') ? cleanUrl.replace('?', '.html?') : `${cleanUrl}.html`;
         const altRes = await fetch(altUrl, { credentials: 'include' });
         if (altRes.ok) res = altRes;
       }
 
       if (!res.ok) {
-        window.location.href = url;
+        console.warn('SPA fetch failed:', cleanUrl, res.status);
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = '/';
+          return;
+        }
+        if (typeof window.Toast !== 'undefined') {
+          window.Toast.show(res.status === 404 ? 'Page not found: ' + cleanUrl : 'Failed to load page. Please check connection.', 'error');
+        }
+        if (pageContent) pageContent.style.opacity = '1';
         return;
       }
 
@@ -432,12 +497,16 @@ const Shell = (() => {
       const newPageContent = newDoc.querySelector('.page-content');
 
       if (!newPageContent || !pageContent) {
-        window.location.href = url;
+        console.warn('SPA page-content missing for', cleanUrl);
+        if (typeof window.Toast !== 'undefined') {
+          window.Toast.show('Unable to render page content.', 'error');
+        }
+        if (pageContent) pageContent.style.opacity = '1';
         return;
       }
 
       if (pushState) {
-        window.history.pushState({ spa: true, url }, '', url);
+        window.history.pushState({ spa: true, url: cleanUrl }, '', cleanUrl);
       }
 
       if (newDoc.title) {
@@ -457,8 +526,12 @@ const Shell = (() => {
         }
       });
 
-      // Inject new page modals/panels
+      // Inject new page modals/panels (removing any duplicate IDs first)
       newDoc.querySelectorAll('.modal-backdrop, .slide-panel, .panel-overlay').forEach(el => {
+        const id = el.getAttribute('id');
+        if (id) {
+          document.getElementById(id)?.remove();
+        }
         document.body.appendChild(document.importNode(el, true));
       });
 
@@ -482,13 +555,14 @@ const Shell = (() => {
         }
       });
 
-      // Swap in the new page content
+      // Swap in the new page content smoothly
       pageContent.innerHTML = newPageContent.innerHTML;
+      pageContent.style.opacity = '1';
 
-      // Dynamically load any external scripts from the new page
+      // Dynamically load any external scripts from the new page (with timeout)
       const scriptPromises = [];
       const newScripts = Array.from(newDoc.querySelectorAll('script'));
-      const coreScripts = ['api-client.js', 'table.js', 'offline-queue.js', 'shell.js', 'theme.js', 'copilot.js'];
+      const coreScripts = ['api-client.js', 'table.js', 'offline-queue.js', 'shell.js', 'theme.js', 'copilot.js', 'toast.js', 'modal.js', 'cache-manager.js'];
 
       for (const s of newScripts) {
         const src = s.getAttribute('src');
@@ -497,10 +571,12 @@ const Shell = (() => {
           if (document.querySelector(`script[src="${src}"]`)) continue;
 
           scriptPromises.push(new Promise((resolve) => {
+            const timeout = setTimeout(() => resolve(), 3000);
             const scriptEl = document.createElement('script');
             scriptEl.src = src;
-            scriptEl.onload = resolve;
+            scriptEl.onload = () => { clearTimeout(timeout); resolve(); };
             scriptEl.onerror = () => {
+              clearTimeout(timeout);
               console.warn('Failed to load script in SPA:', src);
               resolve();
             };
@@ -513,26 +589,39 @@ const Shell = (() => {
         await Promise.all(scriptPromises);
       }
 
-      // Execute new page inline scripts
+      // Execute new page inline scripts safely without crashing SPA
       for (const s of newScripts) {
         if (!s.getAttribute('src') && s.textContent.trim()) {
-          const inlineScript = document.createElement('script');
-          inlineScript.textContent = s.textContent;
-          document.body.appendChild(inlineScript);
-          inlineScript.remove();
+          try {
+            const inlineScript = document.createElement('script');
+            inlineScript.textContent = s.textContent;
+            document.body.appendChild(inlineScript);
+            inlineScript.remove();
+          } catch (scriptErr) {
+            console.error('Error executing inline script on', cleanUrl, scriptErr);
+          }
         }
       }
 
       window.scrollTo({ top: 0, behavior: 'instant' });
     } catch (err) {
-      console.error('SPA navigation error, falling back:', err);
-      window.location.href = url;
+      console.error('SPA navigation error:', err);
+      if (typeof window.Toast !== 'undefined') {
+        window.Toast.show('Navigation error: ' + (err.message || 'Please try again'), 'error');
+      }
+      const pageContent = document.querySelector('.page-content');
+      if (pageContent) pageContent.style.opacity = '1';
     } finally {
+      hideTopProgressBar();
       _isNavigating = false;
     }
   }
 
+  let _spaLinkInterceptionInitialized = false;
   function setupSpaLinkInterception() {
+    if (_spaLinkInterceptionInitialized) return;
+    _spaLinkInterceptionInitialized = true;
+
     document.addEventListener('click', (e) => {
       const a = e.target.closest('a');
       if (!a) return;
@@ -544,8 +633,7 @@ const Shell = (() => {
       if (href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) return;
       if (href.startsWith('/api/')) return;
 
-      const isAppRoute = href.startsWith('/admin') || href.startsWith('/staff') || href.startsWith('/profile');
-      if (!isAppRoute) return;
+      if (!isAppRoute(href)) return;
 
       e.preventDefault();
       navigate(href);
@@ -789,7 +877,10 @@ const Shell = (() => {
     return me;
   }
 
-  return { init, icon, navigate, getSkeletonLoaderHtml, updateActiveNavLink };
+  // Proactively initialize SPA link interception immediately upon script load
+  setupSpaLinkInterception();
+
+  return { init, icon, navigate, getSkeletonLoaderHtml, updateActiveNavLink, setupSpaLinkInterception };
 })();
 // Global password visibility toggle handler via event delegation
 document.addEventListener('click', (e) => {

@@ -673,7 +673,7 @@
 
       localStorage.removeItem('akriti_patient_draft');
       PatientForm.clearForm();
-      setTimeout(() => window.location.href = '/staff/patients', 1500);
+      setTimeout(() => (window.Shell?.navigate ? window.Shell.navigate('/staff/patients') : window.location.href = '/staff/patients'), 1500);
     } catch (err) {
       Toast.show(err.message || 'Failed to save patient', 'error');
     } finally {

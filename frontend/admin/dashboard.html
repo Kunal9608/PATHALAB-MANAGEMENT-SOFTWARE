@@ -74,7 +74,7 @@
       <div class="recent-table-wrap">
         <div class="recent-header">
           <span class="font-display fw-600" style="font-size:var(--text-lg)">Recent Patients</span>
-          <a href="/admin/patients.html" class="btn btn-ghost btn-sm">View all</a>
+          <a href="/admin/patients" class="btn btn-ghost btn-sm">View all</a>
         </div>
         <div id="recent-patients-table"></div>
       </div>
@@ -107,7 +107,9 @@
   }
 
   function renderKPIs(stats) {
-    document.getElementById('kpi-grid').innerHTML =
+    const kg = document.getElementById('kpi-grid');
+    if (!kg) return;
+    kg.innerHTML =
       kpiCard('Today Revenue',      formatCurrency(stats.today_revenue),   'Cash + QR') +
       kpiCard('Today Patients',     stats.today_patients,                   'Registered today') +
       kpiCard('Pending Reports',    stats.pending_reports,                  'Awaiting upload') +
@@ -123,7 +125,8 @@
     const stats = await API.get('/api/v1/finance/dashboard');
     if (stats) renderKPIs(stats);
   } catch {
-    document.getElementById('kpi-grid').innerHTML = `<div class="text-muted text-sm" style="grid-column:1/-1;padding:20px">Failed to load KPIs</div>`;
+    const kg = document.getElementById('kpi-grid');
+    if (kg) kg.innerHTML = `<div class="text-muted text-sm" style="grid-column:1/-1;padding:20px">Failed to load KPIs</div>`;
   }
 
   // ── Revenue Chart ─────────────────────────────────────────────────────────
@@ -133,39 +136,42 @@
     const fmtDate = d => d.toISOString().split('T')[0];
     const rev = await API.get(`/api/v1/revenue/daily?from=${fmtDate(from)}&to=${fmtDate(today)}`);
 
-    document.getElementById('revenue-skel').style.display = 'none';
+    const skel = document.getElementById('revenue-skel');
+    if (skel) skel.style.display = 'none';
     const canvas = document.getElementById('revenue-chart');
-    canvas.style.display = '';
+    if (canvas && typeof Chart !== 'undefined') {
+      canvas.style.display = '';
 
-    new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: rev.data.map(d => {
-          const dt = new Date(d.period);
-          return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-        }),
-        datasets: [{
-          label: 'Revenue',
-          data: rev.data.map(d => d.revenue),
-          borderColor: '#9A0002',
-          backgroundColor: 'rgba(154,0,2,0.07)',
-          borderWidth: 2,
-          pointRadius: 3,
-          pointBackgroundColor: '#9A0002',
-          fill: true,
-          tension: 0.3,
-        }],
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { ticks: { callback: v => '₹' + v.toLocaleString('en-IN') } },
-          x: { ticks: { maxTicksLimit: 10 } },
+      new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: rev.data.map(d => {
+            const dt = new Date(d.period);
+            return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+          }),
+          datasets: [{
+            label: 'Revenue',
+            data: rev.data.map(d => d.revenue),
+            borderColor: '#9A0002',
+            backgroundColor: 'rgba(154,0,2,0.07)',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: '#9A0002',
+            fill: true,
+            tension: 0.3,
+          }],
         },
-      },
-    });
-  } catch { document.getElementById('revenue-skel').style.display = 'none'; }
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { ticks: { callback: v => '₹' + v.toLocaleString('en-IN') } },
+            x: { ticks: { maxTicksLimit: 10 } },
+          },
+        },
+      });
+    }
+  } catch { const sk = document.getElementById('revenue-skel'); if (sk) sk.style.display = 'none'; }
 
   // ── Payment Split Chart ───────────────────────────────────────────────────
   try {
@@ -174,29 +180,32 @@
     const fmtDate = d => d.toISOString().split('T')[0];
     const split = await API.get(`/api/v1/revenue/payment-split?from=${fmtDate(from)}&to=${fmtDate(today)}`);
 
-    document.getElementById('split-skel').style.display = 'none';
+    const skel = document.getElementById('split-skel');
+    if (skel) skel.style.display = 'none';
     const canvas = document.getElementById('split-chart');
-    canvas.style.display = '';
+    if (canvas && typeof Chart !== 'undefined') {
+      canvas.style.display = '';
 
-    new Chart(canvas, {
-      type: 'doughnut',
-      data: {
-        labels: ['Cash', 'QR / UPI'],
-        datasets: [{
-          data: [split.cash_amount, split.qr_amount],
-          backgroundColor: ['#9A0002', '#3D6B7D'],
-          borderWidth: 0,
-        }],
-      },
-      options: {
-        responsive: true,
-        cutout: '65%',
-        plugins: {
-          legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 12 } } },
+      new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: ['Cash', 'QR / UPI'],
+          datasets: [{
+            data: [split.cash_amount, split.qr_amount],
+            backgroundColor: ['#9A0002', '#3D6B7D'],
+            borderWidth: 0,
+          }],
         },
-      },
-    });
-  } catch { document.getElementById('split-skel').style.display = 'none'; }
+        options: {
+          responsive: true,
+          cutout: '65%',
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 12 } } },
+          },
+        },
+      });
+    }
+  } catch { const sk = document.getElementById('split-skel'); if (sk) sk.style.display = 'none'; }
 
   // ── Recent Patients ───────────────────────────────────────────────────────
   const recentTable = new DataTable({

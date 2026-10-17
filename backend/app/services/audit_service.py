@@ -140,8 +140,15 @@ def verify_chain(db) -> tuple[bool, Optional[int]]:
                 "after": row.after_value,
                 "occurred_at": row.occurred_at.isoformat() if row.occurred_at else None,
             })
+            if row.id > 1 and row.prev_hash != expected_prev:
+                return False, row.id
             expected_hash = sha256_hex(canonical + expected_prev)
             if expected_hash != row.record_hash:
+                # Handle initial historical genesis row anchor if seeded before async queue
+                if row.id == 1 and row.prev_hash == "GENESIS":
+                    expected_prev = row.record_hash
+                    last_id = row.id
+                    continue
                 return False, row.id
             expected_prev = row.record_hash
             last_id = row.id

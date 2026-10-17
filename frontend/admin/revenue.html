@@ -149,19 +149,26 @@
           scales: { y: { ticks: { callback: v => '₹' + v.toLocaleString('en-IN') } } },
         },
       });
-      document.getElementById('daily-total').textContent = `Total for period: ${formatCurrency(rev.total)} across ${rev.data.length} days`;
-    } catch { document.getElementById('daily-skel').style.display = 'none'; Toast.show('Failed to load daily revenue', 'error'); }
+      const dtEl = document.getElementById('daily-total');
+      if (dtEl) dtEl.textContent = `Total for period: ${formatCurrency(rev.total)} across ${rev.data.length} days`;
+    } catch { const sk = document.getElementById('daily-skel'); if (sk) sk.style.display = 'none'; Toast.show('Failed to load daily revenue', 'error'); }
   }
 
   // ── Monthly Revenue ───────────────────────────────────────────────────────
   async function loadMonthly() {
-    const year = parseInt(document.getElementById('monthly-year').value);
-    document.getElementById('monthly-skel').style.display = '';
-    document.getElementById('monthly-chart').style.display = 'none';
+    const yrEl = document.getElementById('monthly-year');
+    if (!yrEl) return;
+    const year = parseInt(yrEl.value);
+    const mSkel = document.getElementById('monthly-skel');
+    if (mSkel) mSkel.style.display = '';
+    const mCanvas = document.getElementById('monthly-chart');
+    if (mCanvas) mCanvas.style.display = 'none';
     try {
       const rev = await API.get(`/api/v1/revenue/monthly?year=${year}`);
-      document.getElementById('monthly-skel').style.display = 'none';
+      const sk = document.getElementById('monthly-skel');
+      if (sk) sk.style.display = 'none';
       const canvas = document.getElementById('monthly-chart');
+      if (!canvas || typeof Chart === 'undefined') return;
       canvas.style.display = '';
       if (monthlyChart) monthlyChart.destroy();
       monthlyChart = new Chart(canvas, {
@@ -181,19 +188,25 @@
           scales: { y: { ticks: { callback: v => '₹' + v.toLocaleString('en-IN') } } },
         },
       });
-    } catch { document.getElementById('monthly-skel').style.display = 'none'; }
+    } catch { const sk = document.getElementById('monthly-skel'); if (sk) sk.style.display = 'none'; }
   }
 
   // ── Payment Split ─────────────────────────────────────────────────────────
   async function loadSplit() {
-    const from = document.getElementById('daily-from').value || fmtDate(from30);
-    const to   = document.getElementById('daily-to').value || fmtDate(today);
-    document.getElementById('split-skel').style.display = '';
-    document.getElementById('split-chart').style.display = 'none';
+    const dFrom = document.getElementById('daily-from');
+    const dTo   = document.getElementById('daily-to');
+    const from = dFrom ? dFrom.value || fmtDate(from30) : fmtDate(from30);
+    const to   = dTo ? dTo.value || fmtDate(today) : fmtDate(today);
+    const sSkel = document.getElementById('split-skel');
+    if (sSkel) sSkel.style.display = '';
+    const sCanvas = document.getElementById('split-chart');
+    if (sCanvas) sCanvas.style.display = 'none';
     try {
       const split = await API.get(`/api/v1/revenue/payment-split?from=${from}&to=${to}`);
-      document.getElementById('split-skel').style.display = 'none';
+      const sk = document.getElementById('split-skel');
+      if (sk) sk.style.display = 'none';
       const canvas = document.getElementById('split-chart');
+      if (!canvas || typeof Chart === 'undefined') return;
       canvas.style.display = '';
       if (splitChart) splitChart.destroy();
       splitChart = new Chart(canvas, {
@@ -204,11 +217,14 @@
         },
         options: { responsive: true, cutout: '60%', plugins: { legend: { position: 'bottom' } } },
       });
-      document.getElementById('split-detail').innerHTML = `
-        Cash: <strong>${formatCurrency(split.cash_amount)}</strong> (${split.cash_count} txns) &nbsp;|&nbsp;
-        QR: <strong>${formatCurrency(split.qr_amount)}</strong> (${split.qr_count} txns)
-      `;
-    } catch { document.getElementById('split-skel').style.display = 'none'; }
+      const splitDetail = document.getElementById('split-detail');
+      if (splitDetail) {
+        splitDetail.innerHTML = `
+          Cash: <strong>${formatCurrency(split.cash_amount)}</strong> (${split.cash_count} txns) &nbsp;|&nbsp;
+          QR: <strong>${formatCurrency(split.qr_amount)}</strong> (${split.qr_count} txns)
+        `;
+      }
+    } catch { const sk = document.getElementById('split-skel'); if (sk) sk.style.display = 'none'; }
   }
 
   // ── Export CSV ─────────────────────────────────────────────────────────────

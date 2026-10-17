@@ -8,17 +8,21 @@ logger = logging.getLogger(__name__)
 
 
 def _json_safe(data):
-    if isinstance(data, bytes):
+    if isinstance(data, BaseException):
+        return str(data)
+    elif isinstance(data, bytes):
         try:
             return data.decode("utf-8")
         except UnicodeDecodeError:
             return data.hex()
     elif isinstance(data, dict):
-        return {k: _json_safe(v) for k, v in data.items()}
-    elif isinstance(data, list):
+        return {str(k): _json_safe(v) for k, v in data.items()}
+    elif isinstance(data, (list, set)):
         return [_json_safe(item) for item in data]
     elif isinstance(data, tuple):
         return tuple(_json_safe(item) for item in data)
+    elif not isinstance(data, (str, int, float, bool, type(None))):
+        return str(data)
     return data
 
 

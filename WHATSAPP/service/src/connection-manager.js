@@ -150,7 +150,8 @@ class ConnectionManager {
           this.status = 'disconnected';
           this.lastDisconnectedAt = new Date().toISOString();
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          const isReplaced = statusCode === DisconnectReason.connectionReplaced || statusCode === 440;
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !isReplaced;
 
           this.lastError = lastDisconnect?.error || 'Connection closed';
           console.log(`[WhatsApp] Connection closed. Reason: ${statusCode}, Reconnect: ${shouldReconnect}`);
@@ -158,6 +159,8 @@ class ConnectionManager {
           if (statusCode === DisconnectReason.loggedOut) {
             console.log('[WhatsApp] Session logged out by device. Cleaning session credentials...');
             this._cleanSession();
+          } else if (isReplaced) {
+            console.log('[WhatsApp] Connection replaced by another session/process (Reason 440). Halting auto-reconnect to prevent duplicate session collision.');
           } else if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             const backoffMs = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 15000);

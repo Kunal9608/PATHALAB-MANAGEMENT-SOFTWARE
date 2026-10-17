@@ -449,20 +449,22 @@
     }
   }
 
-  fileInput.addEventListener('change', () => updateDropLabel(fileInput.files[0]));
+  if (fileInput) fileInput.addEventListener('change', () => updateDropLabel(fileInput.files[0]));
 
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--color-primary)'; dropZone.style.background = 'var(--color-primary-tint)'; });
-  dropZone.addEventListener('dragleave', () => updateDropLabel(fileInput.files[0]));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    const dt = e.dataTransfer;
-    if (dt.files.length) {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(dt.files[0]);
-      fileInput.files = dataTransfer.files;
-      updateDropLabel(fileInput.files[0]);
-    }
-  });
+  if (dropZone) {
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--color-primary)'; dropZone.style.background = 'var(--color-primary-tint)'; });
+    dropZone.addEventListener('dragleave', () => updateDropLabel(fileInput?.files[0]));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      const dt = e.dataTransfer;
+      if (dt && dt.files.length && fileInput) {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(dt.files[0]);
+        fileInput.files = dataTransfer.files;
+        updateDropLabel(fileInput.files[0]);
+      }
+    });
+  }
 
   // ── Patients Table ─────────────────────────────────────────────────────────
   const table = new DataTable({

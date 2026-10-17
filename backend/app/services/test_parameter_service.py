@@ -68,6 +68,12 @@ def submit_report_entry(db: Session, patient_id: uuid.UUID, payload: ReportEntry
     )
     db.commit()
 
+    try:
+        from backend.app.core import copilot_cache
+        copilot_cache.invalidate_patient_sync(str(patient.patient_code))
+    except Exception:
+        pass
+
     # Queue background task for PDF generation
     background_tasks.add_task(
         _background_generate_report,

@@ -12,11 +12,14 @@ from backend.app.services import auth_service
 from backend.app.config import settings
 from backend.app.core.limiter import limiter
 
+import os
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "60/minute")
 
 @router.post("/login")
-@limiter.limit("3/minute")
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login(payload: LoginRequest, request: Request, response: Response,
           db: Session = Depends(get_db)):
     from backend.app.services.recaptcha_service import verify_recaptcha_token

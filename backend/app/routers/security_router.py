@@ -37,9 +37,21 @@ def my_sessions(current_user=Depends(get_current_user), db: Session = Depends(ge
 @sessions_router.post("/{session_id}/revoke")
 def revoke_session(session_id: uuid.UUID, current_user=Depends(get_current_user),
                    db: Session = Depends(get_db)):
+    from backend.app.models.user import RoleEnum
+    from backend.app.models.active_session import ActiveSession
+    from fastapi import HTTPException
+
+    sess = db.query(ActiveSession).filter(ActiveSession.id == session_id).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Non-admin users can ONLY revoke their own sessions
+    if current_user.role != RoleEnum.admin and sess.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You do not have permission to revoke this session")
+
     ok = session_repo.revoke_session(db, session_id)
     db.commit()
-    return {"message": "Session revoked" if ok else "Session not found"}
+    return {"message": "Session revoked"}
 
 
 @sessions_router.get("/all")

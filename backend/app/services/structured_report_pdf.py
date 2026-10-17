@@ -41,14 +41,15 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
     buffer = io.BytesIO()
     
     # A4 = 595.27 x 841.89 points
-    # topMargin 140 points clears the physical Akriti header.
-    # bottomMargin 100 points clears the physical decorative footer.
+    # topMargin 140 points clears physical pre-printed stationery header.
+    # When letterhead_mode=True (e.g. WhatsApp digital delivery), topMargin is 30 points and digital header is added.
+    top_margin = 30 if letterhead_mode else 140
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
         leftMargin=36,
         rightMargin=36,
-        topMargin=140,
+        topMargin=top_margin,
         bottomMargin=100
     )
 
@@ -143,6 +144,62 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
     )
 
     story = []
+
+    # 0. Digital Pathology Letterhead Header (Included for WhatsApp digital delivery)
+    if letterhead_mode:
+        from backend.app.config import settings
+        lab_name = getattr(settings, 'LAB_NAME', 'AKRITI DIAGNOSTICS CENTER') or 'AKRITI DIAGNOSTICS CENTER'
+        lab_addr = getattr(settings, 'LAB_ADDRESS', '') or 'Main Road, Akriti Diagnostics Center'
+        lab_phone = getattr(settings, 'LAB_PHONE', '') or '9006964947'
+
+        lab_title_style = ParagraphStyle(
+            'LabTitleHeader',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=18,
+            leading=22,
+            textColor=colors.HexColor('#6D0001'),
+            alignment=TA_CENTER
+        )
+        lab_sub_style = ParagraphStyle(
+            'LabSubHeader',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=9,
+            leading=12,
+            textColor=colors.HexColor('#222222'),
+            alignment=TA_CENTER
+        )
+        lab_info_style = ParagraphStyle(
+            'LabInfoLine',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8,
+            leading=11,
+            textColor=colors.HexColor('#555555'),
+            alignment=TA_CENTER
+        )
+
+        story.append(Paragraph(lab_name.upper(), lab_title_style))
+        story.append(Spacer(1, 2))
+        story.append(Paragraph("ADVANCED CLINICAL PATHOLOGY & DIAGNOSTIC SERVICES", lab_sub_style))
+        story.append(Spacer(1, 2))
+        story.append(Paragraph(f"{lab_addr}   |   Contact: {lab_phone}", lab_info_style))
+        story.append(Spacer(1, 2))
+        story.append(Paragraph("Govt. Regd. Fully Computerized & Automated Testing Laboratory   |   Open All 7 Days", lab_info_style))
+        story.append(Spacer(1, 6))
+
+        # Distinct Brand Separator Line
+        divider = Table([[""]], colWidths=[523], rowHeights=[1.5])
+        divider.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#6D0001')),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(divider)
+        story.append(Spacer(1, 8))
 
     # 1. Patient Demographics Block
     gender_str = patient.gender.value[0].upper() + patient.gender.value[1:] if hasattr(patient.gender, 'value') else str(patient.gender).capitalize()

@@ -23,7 +23,10 @@
 class DataTable {
   constructor({ containerId, columns, fetchFn, pageSize = 20, emptyMessage = 'No records found.' }) {
     this.container = document.getElementById(containerId);
-    if (!this.container) throw new Error(`DataTable: container #${containerId} not found`);
+    if (!this.container) {
+      this.unmounted = true;
+      return;
+    }
     this.columns = columns;
     this.fetchFn = fetchFn;
     this.pageSize = pageSize;
@@ -72,9 +75,10 @@ class DataTable {
   }
 
   async load(extraFilters = {}, options = {}) {
+    if (this.unmounted || !this.container || !document.contains(this.container)) return;
     if (this.loading) return;
     this.loading = true;
-    if (!options.silent) {
+    if (!options.silent && this.tbody) {
       this.tbody.innerHTML = this._skeletonRows(6);
     }
 
@@ -87,23 +91,28 @@ class DataTable {
 
     try {
       const result = await this.fetchFn(params, options);
+      if (!this.container || !document.contains(this.container)) return;
       this.items = result.items || [];
       this.total = result.total || 0;
       this._renderRows(this.items);
       this._renderPagination();
     } catch (err) {
-      this.tbody.innerHTML = `
-        <tr><td colspan="${this.columns.length}" class="table-empty">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          Failed to load data.
-        </td></tr>
-      `;
+      if (!this.container || !document.contains(this.container)) return;
+      if (this.tbody) {
+        this.tbody.innerHTML = `
+          <tr><td colspan="${this.columns.length}" class="table-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Failed to load data.
+          </td></tr>
+        `;
+      }
     } finally {
       this.loading = false;
     }
   }
 
   _renderRows(items) {
+    if (!this.tbody || !document.contains(this.tbody)) return;
     if (!items.length) {
       this.tbody.innerHTML = `
         <tr><td colspan="${this.columns.length}" class="table-empty">
@@ -127,6 +136,7 @@ class DataTable {
   }
 
   _renderPagination() {
+    if (!this.paginationEl || !document.contains(this.paginationEl)) return;
     const totalPages = Math.ceil(this.total / this.pageSize);
     if (totalPages <= 1) {
       this.paginationEl.style.display = 'none';
@@ -136,7 +146,7 @@ class DataTable {
 
     const from = (this.page - 1) * this.pageSize + 1;
     const to   = Math.min(this.page * this.pageSize, this.total);
-    this.countEl.textContent = `${from}–${to} of ${this.total}`;
+    if (this.countEl) this.countEl.textContent = `${from}–${to} of ${this.total}`;
 
     // Build page buttons (window of 5 around current)
     const pages = [];
@@ -144,28 +154,31 @@ class DataTable {
       pages.push(p);
     }
 
-    this.pagesEl.innerHTML = [
-      `<button class="page-btn" data-p="${this.page - 1}" ${this.page === 1 ? 'disabled' : ''}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>`,
-      ...pages.map(p => `<button class="page-btn ${p === this.page ? 'active' : ''}" data-p="${p}">${p}</button>`),
-      `<button class="page-btn" data-p="${this.page + 1}" ${this.page === totalPages ? 'disabled' : ''}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>`,
-    ].join('');
+    if (this.pagesEl) {
+      this.pagesEl.innerHTML = [
+        `<button class="page-btn" data-p="${this.page - 1}" ${this.page === 1 ? 'disabled' : ''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>`,
+        ...pages.map(p => `<button class="page-btn ${p === this.page ? 'active' : ''}" data-p="${p}">${p}</button>`),
+        `<button class="page-btn" data-p="${this.page + 1}" ${this.page === totalPages ? 'disabled' : ''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`,
+      ].join('');
 
-    this.pagesEl.querySelectorAll('[data-p]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const p = parseInt(btn.dataset.p);
-        if (!isNaN(p) && p >= 1 && p <= totalPages) {
-          this.page = p;
-          this.load();
-        }
+      this.pagesEl.querySelectorAll('[data-p]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const p = parseInt(btn.dataset.p);
+          if (!isNaN(p) && p >= 1 && p <= totalPages) {
+            this.page = p;
+            this.load();
+          }
+        });
       });
-    });
+    }
   }
 
   setFilter(key, value) {
+    if (this.unmounted) return;
     if (value === '' || value == null) {
       delete this.filters[key];
     } else {
@@ -175,6 +188,7 @@ class DataTable {
   }
 
   refresh() {
+    if (this.unmounted) return;
     this.page = 1;
     this.load();
   }

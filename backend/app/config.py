@@ -82,7 +82,10 @@ class Settings(BaseSettings):
     LLM_MODEL: str = ""
     LLM_TEMPERATURE: float = 0.6
     LLM_TOP_P: float = 0.95
-    LLM_MAX_TOKENS: int = 4096
+    LLM_MAX_TOKENS: int = 600
+
+    COPILOT_LIMIT_ADMIN: int = 10
+    COPILOT_LIMIT_STAFF: int = 5
 
     GROQ_API_KEY: str = ""
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"

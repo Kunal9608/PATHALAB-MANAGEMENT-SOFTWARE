@@ -271,3 +271,59 @@ def generate_and_save_structured_report(db: Session, patient_id: uuid.UUID, uplo
         db, patient_id, pdf_bytes, filename, uploader_id, DummyBackgroundTasks(),
         reason="Automated structured report generation", force=True, source="auto", partial_release=partial_release
     )
+
+
+def generate_patient_report_pdf_bytes(db: Session, patient_id: uuid.UUID, letterhead_mode: bool = False) -> bytes:
+    """Generate official PDF bytes for patient on-the-fly. If letterhead_mode=True, includes digital lab header (for WhatsApp)."""
+    from backend.app.models.patient_test_result import PatientTestResult
+    from backend.app.services.structured_report_pdf import generate_structured_report_pdf
+    from collections import defaultdict
+    from sqlalchemy.orm import joinedload
+
+    patient = patient_repo.get_by_id(db, patient_id)
+    if not patient:
+        raise ValueError("Patient not found")
+
+    all_results = db.query(PatientTestResult).options(
+        joinedload(PatientTestResult.parameter)
+    ).filter(
+        PatientTestResult.patient_id == patient_id
+    ).all()
+
+    results_by_test = defaultdict(list)
+    for r in all_results:
+        results_by_test[r.test_id].append(r)
+
+    booked_tests_data = []
+    for pt in (patient.patient_tests or []):
+        test_obj = pt.test
+        if not test_obj:
+            continue
+
+        results = results_by_test.get(test_obj.id, [])
+        params_list = []
+        for r in results:
+            param = r.parameter
+            if not param:
+                continue
+            ref_str = param.reference_text
+            if not ref_str and param.reference_low is not None and param.reference_high is not None:
+                ref_str = f"{param.reference_low} - {param.reference_high}"
+            params_list.append({
+                "name": param.parameter_name,
+                "value": r.entered_value,
+                "unit": param.unit or "",
+                "reference": ref_str or "",
+                "is_abnormal": r.is_abnormal,
+                "display_order": param.display_order
+            })
+
+        params_list.sort(key=lambda x: x["display_order"])
+        booked_tests_data.append({
+            "test_name": test_obj.name,
+            "interpretation_note": "",
+            "parameters": params_list
+        })
+
+    return generate_structured_report_pdf(patient, booked_tests_data, letterhead_mode=letterhead_mode)
+

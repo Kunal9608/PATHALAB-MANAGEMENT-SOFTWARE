@@ -69,9 +69,13 @@ services:
       - .env
     environment:
       - WORKERS=${WORKERS:-2}
+      - REDIS_ENABLED=true
       - REDIS_URL=redis://redis:6379/0
       - WHATSAPP_SERVICE_URL=http://whatsapp:3001
+      - START_INTERNAL_WHATSAPP=false
+    command: ["python", "main.py"]
     volumes:
+      - .:/app
       - /app/venv/
       - /app/.venv/
       - app_uploads:/app/uploads

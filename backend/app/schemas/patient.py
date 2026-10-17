@@ -66,6 +66,10 @@ class PatientCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_payment_mode(self):
+        if self.amount_paid < 0:
+            raise ValueError("amount_paid cannot be negative")
+        if self.discount_amount < 0:
+            raise ValueError("discount_amount cannot be negative")
         if self.amount_paid > 0 and not self.payment_mode:
             raise ValueError("payment_mode is required when amount is paid")
         if self.amount_paid == 0:

@@ -8,6 +8,8 @@ import string
 
 from sqlalchemy.orm import Session
 
+from fastapi import HTTPException
+
 from backend.app.core.security import (
     verify_password, hash_password, create_access_token,
     create_refresh_token, create_short_lived_token, decode_token,
@@ -79,7 +81,7 @@ def login(db: Session, email: str, password: str, ip: str,
     if user is None:
         session_repo.record_login(db, email, "unknown_email", ip, user_agent)
         db.commit()
-        raise ValueError("Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Lockout check
     if getattr(user, "is_locked", False):
@@ -105,7 +107,7 @@ def login(db: Session, email: str, password: str, ip: str,
             raise PermissionError("Account locked due to 5 failed attempts. Please login via OTP to unlock.")
         session_repo.record_login(db, email, "bad_password", ip, user_agent, user.id)
         db.commit()
-        raise ValueError("Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if needs_rehash:
         user.password_hash = hash_password(password)

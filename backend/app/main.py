@@ -430,4 +430,4 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "localhost")
     port = int(os.getenv("PORT", 8000))
     print(f"Starting Akriti Diagnostics Lab Server on http://{host}:{port}")
-    uvicorn.run("backend.app.main:app", host=host, port=port, reload=True)
+    uvicorn.run("backend.app.main:app", host=host, port=port, reload=True, server_header=False)

@@ -129,23 +129,478 @@
 }
 
 .copilot-msg {
-  max-width: 88%;
-  padding: 12px 16px;
+  max-width: 90%;
+  padding: 10px 14px;
   border-radius: 12px;
-  font-size: 0.93rem;
+  font-size: 0.91rem;
   font-weight: 500;
   font-family: var(--font-body, system-ui, sans-serif);
-  line-height: 1.5;
+  line-height: 1.45;
   word-wrap: break-word;
-  white-space: pre-wrap;
+  white-space: normal;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+.copilot-msg:has(.copilot-patient-card),
+.copilot-msg.has-card {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  max-width: 98% !important;
+}
+
+/* Patient Card Component in Copilot */
+.copilot-patient-card {
+  background: var(--color-surface, #ffffff);
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 2px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-family: var(--font-body, system-ui, sans-serif);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .copilot-patient-card {
+  background: #111e1b;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.3);
+}
+
+.cpc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] .cpc-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.cpc-patient-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cpc-patient-name {
+  font-weight: 800;
+  font-size: 0.97rem;
+  color: var(--color-ink, #0f172a);
+  letter-spacing: -0.2px;
+}
+
+[data-theme="dark"] .cpc-patient-name {
+  color: #FFFFFF;
+}
+
+.cpc-patient-code {
+  font-family: monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-ink-muted, #475569);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .cpc-patient-code {
+  background: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+}
+
+.cpc-badges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.cpc-badge {
+  font-size: 0.73rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.cpc-badge-default {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.cpc-badge-info {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+[data-theme="dark"] .cpc-badge-info {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.cpc-badge-success {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+[data-theme="dark"] .cpc-badge-success {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.cpc-badge-warning {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+[data-theme="dark"] .cpc-badge-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde047;
+}
+
+.cpc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  background: rgba(0, 0, 0, 0.025);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+[data-theme="dark"] .cpc-grid {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cpc-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpc-k {
+  color: var(--color-ink-muted, #64748b);
+  font-weight: 600;
+  font-size: 0.77rem;
+  flex-shrink: 0;
+}
+
+.cpc-v {
+  color: var(--color-ink, #0f172a);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-theme="dark"] .cpc-v {
+  color: #f1f5f9;
+}
+
+.cpc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cpc-section-label {
+  font-weight: 700;
+  font-size: 0.74rem;
+  color: var(--color-ink-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cpc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cpc-chip {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-ink, #334155);
+  line-height: 1.35;
+}
+
+[data-theme="dark"] .cpc-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+.cpc-finance-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .cpc-finance-bar {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.cpc-fin-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.25;
+}
+
+.cpc-fin-lbl {
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: var(--color-ink-muted, #64748b);
+  text-transform: uppercase;
+}
+
+.cpc-fin-val {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--color-ink, #0f172a);
+}
+
+[data-theme="dark"] .cpc-fin-val {
+  color: #f8fafc;
+}
+
+.cpc-fin-sep {
+  width: 1px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .cpc-fin-sep {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cpc-abnormal-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(217, 119, 6, 0.1);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  color: #b45309;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+
+[data-theme="dark"] .cpc-abnormal-banner {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.cpc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+
+.cpc-btn-report {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #0a192f 0%, #1b3052 100%);
+  color: #ffffff !important;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 6px 13px;
+  border-radius: 6px;
+  text-decoration: none !important;
+  box-shadow: 0 2px 6px rgba(10, 25, 47, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cpc-btn-report:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(10, 25, 47, 0.3);
+}
+
+.cpc-report-pending {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-ink-muted, #64748b);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .copilot-msg strong {
   font-weight: 700;
   color: inherit;
+}
+
+.copilot-section-header {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  margin-top: 10px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding-bottom: 3px;
+}
+
+[data-theme="dark"] .copilot-section-header {
+  color: #F9FAFB;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.copilot-section-header:first-child {
+  margin-top: 0;
+}
+
+.copilot-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 3px 0;
+  line-height: 1.45;
+}
+
+.copilot-bullet {
+  color: var(--color-primary, #8B0000);
+  font-weight: 700;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.copilot-num {
+  font-weight: 700;
+  color: var(--color-ink-muted);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.copilot-inline-code {
+  background: rgba(0, 0, 0, 0.07);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 0.88em;
+}
+
+[data-theme="dark"] .copilot-inline-code {
+  background: rgba(255, 255, 255, 0.12);
+  color: #93C5FD;
+}
+
+.copilot-svg-icon {
+  display: inline-block;
+  vertical-align: middle;
+  color: var(--color-primary, #8B0000);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .copilot-svg-icon {
+  color: #F87171;
+}
+
+.copilot-svg-icon-alert {
+  display: inline-block;
+  vertical-align: middle;
+  color: #D97706;
+  flex-shrink: 0;
+}
+
+.copilot-card-header {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+[data-theme="dark"] .copilot-card-header {
+  color: #FFFFFF;
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+.copilot-card-header .copilot-svg-icon {
+  margin-top: 0;
+}
+
+.copilot-report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #0a192f 0%, #1b3052 100%);
+  color: #FFFFFF !important;
+  font-weight: 600;
+  font-size: 0.84rem;
+  padding: 5px 12px;
+  border-radius: 6px;
+  text-decoration: none !important;
+  margin: 3px 0;
+  box-shadow: 0 2px 6px rgba(10, 25, 47, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.copilot-report-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(10, 25, 47, 0.3);
+  color: #FFFFFF !important;
+}
+
+.copilot-badge-abnormal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(217, 119, 6, 0.12);
+  color: #B45309;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  margin-left: 4px;
+}
+
+[data-theme="dark"] .copilot-badge-abnormal {
+  background: rgba(245, 158, 11, 0.18);
+  color: #FBBF24;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.copilot-link {
+  color: var(--color-primary, #8B0000);
+  text-decoration: underline;
+  font-weight: 600;
 }
 
 .copilot-msg.system {

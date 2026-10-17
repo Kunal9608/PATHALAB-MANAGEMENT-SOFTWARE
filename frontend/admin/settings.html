@@ -351,7 +351,7 @@
       if (sessions.length > 7) {
         html += `
           <div style="margin-top:16px;text-align:center">
-            <a href="/admin/sessions.html" target="_blank" class="btn btn-sm btn-ghost" style="color:var(--color-primary);font-weight:600">
+            <a href="/admin/sessions" target="_blank" class="btn btn-sm btn-ghost" style="color:var(--color-primary);font-weight:600">
               View All Active Sessions (${sessions.length}) &rarr;
             </a>
           </div>
@@ -599,8 +599,19 @@
   async function pollWhatsAppQR() {
     stopWAPolling();
     const statusEl = document.getElementById('wa-qr-status');
+    let pollAttempts = 0;
+    const MAX_ATTEMPTS = 48; // ~2 minutes maximum
 
     async function checkQR() {
+      pollAttempts++;
+      if (pollAttempts > MAX_ATTEMPTS) {
+        stopWAPolling();
+        if (statusEl) {
+          statusEl.innerHTML = `<span style="color:#DC2626">QR code scan timed out. Click <strong>"Connect WhatsApp"</strong> to refresh.</span>`;
+        }
+        return;
+      }
+
       try {
         const qrData = await API.get('/api/v1/whatsapp/qr');
         if (qrData.status === 'connected') {
@@ -625,6 +636,8 @@
     await checkQR();
     waPollTimer = setInterval(checkQR, 2500);
   }
+
+  window.addEventListener('beforeunload', stopWAPolling);
 
   const waConnectBtn = document.getElementById('wa-connect-btn');
   if (waConnectBtn) {

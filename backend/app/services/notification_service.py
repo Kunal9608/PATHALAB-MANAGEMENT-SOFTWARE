@@ -10,6 +10,7 @@ import base64
 import httpx
 from typing import Optional, Dict, Any
 from abc import ABC, abstractmethod
+from backend.app.config import settings
 
 logger = logging.getLogger(__name__)
 

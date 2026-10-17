@@ -57,9 +57,8 @@ class BackendLookupResult:
 # Legacy:   AKR followed by 6 to 12 digits (e.g. AKR1234567)
 PATIENT_ID_EXACT_REGEX = re.compile(r'^(PAT\d{6,12}|AKR\d{6,12})$', re.IGNORECASE)
 PATIENT_ID_SCAN_REGEX = re.compile(r'\b(PAT\d{6,12}|AKR\d{6,12})\b', re.IGNORECASE)
-# Malformed patient candidate must start with PAT/AKR followed by at least one digit (e.g. PAT12, PAT12345, AKR9)
-# Normal English words like "patient", "patients", "pathology", "pathlab" do not contain digits and are never matched.
-MALFORMED_PATIENT_SCAN_REGEX = re.compile(r'\b((?:PAT|AKR)[-_]?\d+[A-Z0-9_\-]*)\b', re.IGNORECASE)
+# Malformed patient candidate: hyphenated patterns like PAT-TEST-001 or unpadded PAT123
+MALFORMED_PATIENT_SCAN_REGEX = re.compile(r'\b((?:PAT|AKR)[-_][A-Z0-9_\-]+|(?:PAT|AKR)\d+[A-Z0-9_\-]*)\b', re.IGNORECASE)
 
 RESERVED_WORDS = {
     "PATIENT", "PATIENTS", "PATHOLOGY", "PATHLAB", "PATTERN", "PATTERNS",
@@ -71,6 +70,9 @@ PHONE_SCAN_REGEX = re.compile(r'\b[6-9]\d{9}\b')
 
 TEST_CODE_EXACT_REGEX = re.compile(r'^(TST|TEST)\d{3,6}$', re.IGNORECASE)
 TEST_CODE_SCAN_REGEX = re.compile(r'\b((?:TST|TEST)\d{3,6})\b', re.IGNORECASE)
+
+STAFF_ID_EXACT_REGEX = re.compile(r'^(?:STAFF|STF)\d{3,8}$', re.IGNORECASE)
+STAFF_ID_SCAN_REGEX = re.compile(r'\b((?:STAFF|STF)\d{3,8})\b', re.IGNORECASE)
 
 
 def validate_patient_id(candidate: str) -> Tuple[bool, Optional[str]]:
@@ -217,11 +219,13 @@ async def retrieve_by_phone(
     cache_key = copilot_cache.phone_key(phone_number, scope)
     cached_data = await copilot_cache.get_cached(cache_key)
     if cached_data is not None:
+        msg = None if cached_data else f"No patient records found associated with mobile number {phone_number}."
         return BackendLookupResult(
             status=LookupStatus.success if cached_data else LookupStatus.not_found,
             entity_type="phone",
             identifier=phone_number,
             data=cached_data,
+            message=msg,
             is_cached=True,
             cache_source="redis"
         )
@@ -275,8 +279,17 @@ async def retrieve_test(
     cache_key = copilot_cache.test_key(norm_code)
     cached_data = await copilot_cache.get_cached(cache_key)
     if cached_data is not None:
+        if not cached_data:
+            return BackendLookupResult(
+                status=LookupStatus.not_found,
+                entity_type="test",
+                identifier=norm_code,
+                message=f"No laboratory test exists with code or name '{norm_code}' in the test catalog.",
+                is_cached=True,
+                cache_source="redis"
+            )
         return BackendLookupResult(
-            status=LookupStatus.success if cached_data else LookupStatus.not_found,
+            status=LookupStatus.success,
             entity_type="test",
             identifier=norm_code,
             data=cached_data,
@@ -285,7 +298,13 @@ async def retrieve_test(
         )
 
     try:
-        test = db.query(Test).filter(Test.test_code == norm_code).first()
+        test = db.query(Test).filter(
+            or_(
+                func.upper(Test.test_code) == norm_code,
+                func.upper(Test.name) == norm_code,
+                Test.name.ilike(f"%{norm_code}%")
+            )
+        ).first()
     except Exception as e:
         logger.error(f"Database error during test lookup: {e}")
         return BackendLookupResult(
@@ -301,7 +320,7 @@ async def retrieve_test(
             status=LookupStatus.not_found,
             entity_type="test",
             identifier=norm_code,
-            message=f"No laboratory test exists with code '{norm_code}'."
+            message=f"No laboratory test exists with code or name '{norm_code}' in the test catalog."
         )
 
     test_data = {
@@ -517,10 +536,21 @@ def _extract_patient_details(db: Session, patient: Patient) -> Dict[str, Any]:
     for tr in test_results:
         param = db.query(TestParameter).filter(TestParameter.id == tr.parameter_id).first()
         if param:
+            ref_str = ""
+            if param.reference_text:
+                ref_str = str(param.reference_text).strip()
+            elif param.reference_low is not None and param.reference_high is not None:
+                ref_str = f"{param.reference_low} - {param.reference_high}"
+            elif param.reference_low is not None:
+                ref_str = f">= {param.reference_low}"
+            elif param.reference_high is not None:
+                ref_str = f"<= {param.reference_high}"
+
             results_data.append({
                 "parameter": param.parameter_name,
                 "value": tr.entered_value,
                 "unit": param.unit or "",
+                "normal_range": ref_str,
                 "is_abnormal": tr.is_abnormal
             })
 
@@ -658,3 +688,329 @@ async def retrieve_latest_patient(
             entity_type="patient",
             message="Database error occurred while fetching recent patient."
         )
+
+
+def _format_staff_profile(user: User, fallback_code: Optional[str] = None) -> Dict[str, Any]:
+    role_str = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    scope_str = user.view_scope.value if hasattr(user.view_scope, 'value') else str(user.view_scope)
+    reg_date = user.created_at.strftime("%d-%b-%Y") if user.created_at else "N/A"
+    status_str = "Active" if user.is_active else "Inactive"
+
+    return {
+        "name": user.name,
+        "staff_code": user.staff_code or fallback_code or "N/A",
+        "role": role_str.capitalize(),
+        "email": user.email,
+        "mobile": user.mobile or "N/A",
+        "status": status_str,
+        "view_scope": scope_str.capitalize(),
+        "registered_on": reg_date,
+    }
+
+
+async def retrieve_staff(
+    db: Session,
+    staff_code: str,
+    current_user: User
+) -> BackendLookupResult:
+    """
+    Retrieve real staff member profile by staff code (e.g. STAFF26003).
+    Ensures 100% factual accuracy directly from users database table with ZERO hallucination.
+    """
+    norm_code = staff_code.strip().upper()
+    try:
+        user = db.query(User).filter(
+            func.upper(User.staff_code) == norm_code
+        ).first()
+    except Exception as e:
+        logger.error(f"Database error during staff lookup: {e}")
+        return BackendLookupResult(
+            status=LookupStatus.service_unavailable,
+            entity_type="staff",
+            identifier=norm_code,
+            message="Database connection error while retrieving staff information."
+        )
+
+    if not user:
+        return BackendLookupResult(
+            status=LookupStatus.not_found,
+            entity_type="staff",
+            identifier=norm_code,
+            message=f"No staff member exists with code '{norm_code}' in Akriti Diagnostics database."
+        )
+
+    staff_data = _format_staff_profile(user, fallback_code=norm_code)
+
+    return BackendLookupResult(
+        status=LookupStatus.success,
+        entity_type="staff",
+        identifier=norm_code,
+        data=staff_data,
+        is_cached=False,
+        cache_source="postgresql"
+    )
+
+
+async def retrieve_staff_by_phone(
+    db: Session,
+    phone_number: str,
+    current_user: User
+) -> BackendLookupResult:
+    """
+    Retrieve real staff member profile by mobile number (e.g. 9584986532).
+    """
+    clean_phone = re.sub(r'\D', '', phone_number)
+    if len(clean_phone) > 10 and clean_phone.startswith("91"):
+        clean_phone = clean_phone[-10:]
+    try:
+        user = db.query(User).filter(
+            User.mobile == clean_phone
+        ).first()
+    except Exception as e:
+        logger.error(f"Database error during staff phone lookup: {e}")
+        return BackendLookupResult(
+            status=LookupStatus.service_unavailable,
+            entity_type="staff",
+            identifier=clean_phone,
+            message="Database connection error while retrieving staff information."
+        )
+
+    if not user:
+        return BackendLookupResult(
+            status=LookupStatus.not_found,
+            entity_type="staff",
+            identifier=clean_phone,
+            message=f"No staff member found associated with mobile number {clean_phone} in Akriti Diagnostics database."
+        )
+
+    staff_data = _format_staff_profile(user)
+
+    return BackendLookupResult(
+        status=LookupStatus.success,
+        entity_type="staff",
+        identifier=clean_phone,
+        data=staff_data,
+        is_cached=False,
+        cache_source="postgresql"
+    )
+
+
+async def retrieve_staff_by_name(
+    db: Session,
+    name: str,
+    current_user: User
+) -> BackendLookupResult:
+    """
+    Retrieve staff member profile by name (case-insensitive substring match).
+    """
+    clean_name = name.strip()
+    try:
+        users = db.query(User).filter(
+            User.name.ilike(f"%{clean_name}%")
+        ).all()
+    except Exception as e:
+        logger.error(f"Database error during staff name lookup: {e}")
+        return BackendLookupResult(
+            status=LookupStatus.service_unavailable,
+            entity_type="staff",
+            identifier=clean_name,
+            message="Database connection error while retrieving staff information."
+        )
+
+    if not users:
+        return BackendLookupResult(
+            status=LookupStatus.not_found,
+            entity_type="staff",
+            identifier=clean_name,
+            message=f"No staff member found matching '{clean_name}' in Akriti Diagnostics database."
+        )
+
+    if len(users) == 1:
+        return BackendLookupResult(
+            status=LookupStatus.success,
+            entity_type="staff",
+            identifier=clean_name,
+            data=_format_staff_profile(users[0]),
+            is_cached=False,
+            cache_source="postgresql"
+        )
+    else:
+        results = [_format_staff_profile(u) for u in users]
+        return BackendLookupResult(
+            status=LookupStatus.success,
+            entity_type="staff_list",
+            identifier=clean_name,
+            data=results,
+            is_cached=False,
+            cache_source="postgresql"
+        )
+
+
+async def retrieve_all_staff(
+    db: Session,
+    current_user: User
+) -> BackendLookupResult:
+    """Retrieve verified list of staff members from users table."""
+    try:
+        staff_members = db.query(User).filter(User.role == RoleEnum.staff).order_by(User.created_at.asc()).all()
+        staff_list = []
+        for s in staff_members:
+            staff_list.append({
+                "name": s.name,
+                "staff_code": s.staff_code or "N/A",
+                "email": s.email,
+                "mobile": s.mobile or "N/A",
+                "status": "Active" if s.is_active else "Inactive"
+            })
+        return BackendLookupResult(
+            status=LookupStatus.success,
+            entity_type="staff_list",
+            data=staff_list,
+            is_cached=False,
+            cache_source="postgresql"
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving staff list: {e}")
+        return BackendLookupResult(
+            status=LookupStatus.service_unavailable,
+            entity_type="staff_list",
+            message="Database error occurred while fetching staff list."
+        )
+
+
+async def retrieve_all_tests(db: Session) -> BackendLookupResult:
+    """Retrieve verified catalog of active laboratory tests with prices."""
+    try:
+        tests = db.query(Test).filter(Test.is_active.is_(True)).order_by(Test.category, Test.name).all()
+        test_list = []
+        for t in tests:
+            test_list.append({
+                "test_code": t.test_code,
+                "name": t.name,
+                "price": float(t.price),
+                "category": t.category or "General"
+            })
+        return BackendLookupResult(
+            status=LookupStatus.success,
+            entity_type="test_catalog",
+            data=test_list,
+            is_cached=False,
+            cache_source="postgresql"
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving test catalog: {e}")
+        return BackendLookupResult(
+            status=LookupStatus.service_unavailable,
+            entity_type="test_catalog",
+            message="Database connection error while retrieving test catalog."
+        )
+
+
+async def retrieve_by_patient_name(
+    db: Session,
+    name_query: str,
+    current_user: User
+) -> BackendLookupResult:
+    """
+    Search patient records by name with strict RBAC enforcement.
+    """
+    clean_name = name_query.strip()
+    if len(clean_name) < 2:
+        return BackendLookupResult(
+            status=LookupStatus.invalid_input,
+            entity_type="patient",
+            message="Please provide at least 2 characters for patient name search."
+        )
+
+    try:
+        query = db.query(Patient).filter(
+            Patient.name.ilike(f"%{clean_name}%"),
+            Patient.deleted_at.is_(None)
+        )
+        if getattr(current_user, 'role', None) == RoleEnum.staff and getattr(current_user, 'view_scope', None) != ViewScopeEnum.all:
+            query = query.filter(Patient.collected_by == current_user.id)
+
+        patients = query.order_by(Patient.created_at.desc()).limit(10).all()
+    except Exception as e:
+        logger.error(f"PostgreSQL failure during patient name search: {e}")
+        return BackendLookupResult(
+            status=LookupStatus.service_unavailable,
+            entity_type="patient",
+            identifier=clean_name,
+            message="Database connection error while searching patient records."
+        )
+
+    if not patients:
+        return BackendLookupResult(
+            status=LookupStatus.not_found,
+            entity_type="patient",
+            identifier=clean_name,
+            message=f"No patient records found matching name '{clean_name}' in the database."
+        )
+
+    structured_list = [_extract_patient_details(db, p) for p in patients]
+    return BackendLookupResult(
+        status=LookupStatus.success,
+        entity_type="patient",
+        identifier=clean_name,
+        data=structured_list,
+        is_cached=False,
+        cache_source="postgresql"
+    )
+
+
+async def retrieve_doctors(
+    db: Session,
+    current_user: User,
+    doctor_query: Optional[str] = None
+) -> BackendLookupResult:
+    """
+    Retrieve registered referring doctors from database.
+    Hides commercial commission data from staff (Admin only).
+    """
+    try:
+        query = db.query(Doctor).filter(Doctor.is_active.is_(True))
+        if doctor_query:
+            clean_q = doctor_query.strip().replace("Dr.", "").replace("Dr", "").strip()
+            query = query.filter(Doctor.name.ilike(f"%{clean_q}%"))
+
+        doctors = query.order_by(Doctor.name.asc()).all()
+    except Exception as e:
+        logger.error(f"Error retrieving doctors: {e}")
+        return BackendLookupResult(
+            status=LookupStatus.service_unavailable,
+            entity_type="doctor",
+            message="Database connection error while retrieving doctor records."
+        )
+
+    if not doctors:
+        not_found_msg = f"No doctor registered with name '{doctor_query}' in the database." if doctor_query else "No doctors registered in the system."
+        return BackendLookupResult(
+            status=LookupStatus.not_found,
+            entity_type="doctor",
+            identifier=doctor_query,
+            message=not_found_msg
+        )
+
+    is_admin = getattr(current_user, 'role', None) == RoleEnum.admin
+    doc_list = []
+    for d in doctors:
+        doc_item = {
+            "name": f"Dr. {d.name}" if not d.name.lower().startswith("dr") else d.name,
+            "clinic_name": d.clinic_name or "N/A",
+            "is_active": d.is_active
+        }
+        if is_admin:
+            doc_item["commission_pct"] = float(d.commission_pct or 0.0)
+        doc_list.append(doc_item)
+
+    return BackendLookupResult(
+        status=LookupStatus.success,
+        entity_type="doctor",
+        identifier=doctor_query,
+        data=doc_list,
+        is_cached=False,
+        cache_source="postgresql"
+    )
+
+

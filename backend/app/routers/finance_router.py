@@ -1,5 +1,5 @@
 """Finance router — expenses, revenue, profit/loss, dashboard."""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date, datetime
 from typing import Optional
@@ -36,9 +36,12 @@ def daily_revenue(
 ):
     f = date_from or from_date
     t = date_to or to_date
-    if not f or not t:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="from and to parameters are required")
+    if not t:
+        t = date.today()
+    if not f:
+        f = t.replace(day=1)
+    if f > t:
+        raise HTTPException(status_code=400, detail="'from' date must be before or equal to 'to' date")
     return finance_service.get_daily_revenue(db, f, t)
 
 
@@ -58,9 +61,12 @@ def payment_split(
 ):
     f = date_from or from_date
     t = date_to or to_date
-    if not f or not t:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="from and to parameters are required")
+    if not t:
+        t = date.today()
+    if not f:
+        f = t.replace(day=1)
+    if f > t:
+        raise HTTPException(status_code=400, detail="'from' date must be before or equal to 'to' date")
     return finance_service.get_payment_split(db, f, t)
 
 
@@ -90,9 +96,12 @@ def profit_loss(
 ):
     f = date_from or from_date
     t = date_to or to_date
-    if not f or not t:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="from and to parameters are required")
+    if not t:
+        t = date.today()
+    if not f:
+        f = t.replace(day=1)
+    if f > t:
+        raise HTTPException(status_code=400, detail="'from' date must be before or equal to 'to' date")
     return finance_service.get_profit_loss(db, f, t)
 
 

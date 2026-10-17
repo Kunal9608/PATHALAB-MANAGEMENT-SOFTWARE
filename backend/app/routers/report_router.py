@@ -437,21 +437,30 @@ def send_report_whatsapp(
         raise HTTPException(status_code=400, detail="Patient has no registered mobile number")
 
     file_bytes = None
-    if report.file_path.startswith("supabase:"):
-        parts = report.file_path.replace("supabase:", "").split("/", 1)
-        if len(parts) == 2:
-            bucket_name, file_path_in_bucket = parts
-            from supabase import create_client
-            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            try:
-                file_bytes = supabase.storage.from_(bucket_name).download(file_path_in_bucket)
-            except Exception as e:
-                raise HTTPException(status_code=404, detail=f"Report file not found in Supabase: {e}")
-    else:
-        if not os.path.exists(report.file_path):
-            raise HTTPException(status_code=404, detail="Report file not found on disk")
-        with open(report.file_path, "rb") as f:
-            file_bytes = f.read()
+    # For WhatsApp digital delivery, render official PDF with complete pathology lab header/letterhead
+    try:
+        from backend.app.services.report_service import generate_patient_report_pdf_bytes
+        file_bytes = generate_patient_report_pdf_bytes(db, patient.id, letterhead_mode=True)
+    except Exception as e:
+        import logging
+        logging.getLogger("akriti.reports").warning(f"On-the-fly letterhead PDF generation skipped/failed ({e}), falling back to stored report.")
+
+    if not file_bytes:
+        if report.file_path.startswith("supabase:"):
+            parts = report.file_path.replace("supabase:", "").split("/", 1)
+            if len(parts) == 2:
+                bucket_name, file_path_in_bucket = parts
+                from supabase import create_client
+                supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+                try:
+                    file_bytes = supabase.storage.from_(bucket_name).download(file_path_in_bucket)
+                except Exception as e:
+                    raise HTTPException(status_code=404, detail=f"Report file not found in Supabase: {e}")
+        else:
+            if not os.path.exists(report.file_path):
+                raise HTTPException(status_code=404, detail="Report file not found on disk")
+            with open(report.file_path, "rb") as f:
+                file_bytes = f.read()
 
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Unable to retrieve report document bytes")

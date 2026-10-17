@@ -92,6 +92,13 @@ def start_whatsapp_microservice():
         print("  [SKIP] WhatsApp microservice disabled in configuration")
         return
 
+    # Skip internal node if explicitly disabled or pointing to a separate container
+    wa_url = os.getenv("WHATSAPP_SERVICE_URL", "")
+    start_internal = os.getenv("START_INTERNAL_WHATSAPP", "").lower()
+    if start_internal == "false" or (wa_url and "whatsapp:3001" in wa_url):
+        print(f"  [OK] External WhatsApp microservice configured ({wa_url or 'external'}) — skipping local Node process")
+        return
+
     whatsapp_dir = ROOT / "WHATSAPP" / "service"
     server_script = whatsapp_dir / "src" / "server.js"
     if not server_script.exists():
@@ -170,6 +177,7 @@ def main():
         workers=workers,
         log_level="info",
         access_log=True,
+        server_header=False,
     )
 
 

@@ -571,16 +571,31 @@ const Shell = (() => {
       // Dynamically load any external scripts from the new page (with timeout)
       const scriptPromises = [];
       const newScripts = Array.from(newDoc.querySelectorAll('script'));
-      const coreScripts = ['api-client.js', 'table.js', 'offline-queue.js', 'shell.js', 'theme.js', 'copilot.js', 'toast.js', 'modal.js', 'cache-manager.js'];
 
       for (const s of newScripts) {
         const src = s.getAttribute('src');
         if (src) {
-          if (coreScripts.some(core => src.includes(core))) continue;
-          if (document.querySelector(`script[src="${src}"]`)) continue;
+          const scriptName = src.split('/').pop().split('?')[0];
+
+          // Check if this script is already present in document
+          const isAlreadyInDom = Array.from(document.querySelectorAll('script[src]')).some(existing => {
+            const existingSrc = existing.getAttribute('src') || '';
+            return existingSrc === src || existingSrc.split('/').pop().split('?')[0] === scriptName;
+          });
+
+          // Extra safety check for key global variables that a page may need
+          let needsLoad = !isAlreadyInDom;
+          if (scriptName === 'table.js' && typeof window.DataTable === 'undefined') needsLoad = true;
+          if (scriptName === 'patient-form.js' && typeof window.PatientForm === 'undefined') needsLoad = true;
+          if (scriptName === 'modal.js' && typeof window.Modal === 'undefined') needsLoad = true;
+          if (scriptName === 'toast.js' && typeof window.Toast === 'undefined') needsLoad = true;
+          if (scriptName === 'offline-queue.js' && typeof window.OfflineQueue === 'undefined') needsLoad = true;
+          if (scriptName === 'cache-manager.js' && typeof window.CacheManager === 'undefined') needsLoad = true;
+
+          if (!needsLoad) continue;
 
           scriptPromises.push(new Promise((resolve) => {
-            const timeout = setTimeout(() => resolve(), 3000);
+            const timeout = setTimeout(() => resolve(), 3500);
             const scriptEl = document.createElement('script');
             scriptEl.src = src;
             scriptEl.onload = () => { clearTimeout(timeout); resolve(); };

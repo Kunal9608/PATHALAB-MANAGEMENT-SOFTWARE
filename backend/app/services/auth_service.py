@@ -23,54 +23,125 @@ from backend.app.services import audit_service, notification_service
 
 logger = logging.getLogger(__name__)
 
-# In-memory fallback for lockouts if Redis is not available
-_fail_counts: dict = {}
-_lockouts: dict = {}
+import threading
+import time
+
+# Thread-safe in-memory fallback for lockouts and failed attempts
+_auth_lock = threading.Lock()
+_fail_counts: dict[str, tuple[float, int]] = {}   # email -> (expire_timestamp, count)
+_lockouts: dict[str, float] = {}                  # email -> expire_timestamp
 _otp_req_counts: dict = {}
 _otp_fail_counts: dict = {}
+_consumed_reset_tokens: dict[str, float] = {}     # token_identifier -> expire_timestamp
+
+
+def _is_reset_token_consumed(token_identifier: str) -> bool:
+    r = get_redis()
+    key = f"used_reset_token:{token_identifier}"
+    if r:
+        try:
+            return r.get(key) is not None
+        except Exception as e:
+            logger.warning(f"Redis check used reset token error: {e}")
+
+    now = time.time()
+    with _auth_lock:
+        exp = _consumed_reset_tokens.get(token_identifier)
+        if exp is not None:
+            if now < exp:
+                return True
+            else:
+                _consumed_reset_tokens.pop(token_identifier, None)
+    return False
+
+
+def _mark_reset_token_consumed(token_identifier: str, duration_seconds: int = 600):
+    r = get_redis()
+    key = f"used_reset_token:{token_identifier}"
+    if r:
+        try:
+            r.set(key, "1", ex=duration_seconds)
+            return
+        except Exception as e:
+            logger.warning(f"Redis set used reset token error: {e}")
+
+    now = time.time()
+    with _auth_lock:
+        _consumed_reset_tokens[token_identifier] = now + float(duration_seconds)
+
 
 
 def _redis_incr_fail(email: str) -> int:
     r = get_redis()
     key = f"fail:{email}"
     if r:
-        count = r.incr(key)
-        r.expire(key, 900)
-        return count
-    else:
-        _fail_counts[email] = _fail_counts.get(email, 0) + 1
-        return _fail_counts[email]
+        try:
+            count = r.incr(key)
+            r.expire(key, 900)
+            return int(count)
+        except Exception as e:
+            logger.warning(f"Redis fail incr error: {e}")
+
+    now = time.time()
+    with _auth_lock:
+        if email in _fail_counts:
+            exp, count = _fail_counts[email]
+            if now < exp:
+                new_count = count + 1
+                _fail_counts[email] = (now + 900.0, new_count)
+                return new_count
+        _fail_counts[email] = (now + 900.0, 1)
+        return 1
 
 
-def _redis_set_lockout(email: str):
+def _redis_set_lockout(email: str, duration_seconds: int = 900):
     r = get_redis()
     key = f"lockout:{email}"
     if r:
-        r.set(key, 1, ex=900)
-    else:
-        _lockouts[email] = datetime.now(timezone.utc) + timedelta(minutes=15)
+        try:
+            r.set(key, "1", ex=duration_seconds)
+        except Exception as e:
+            logger.warning(f"Redis set lockout error: {e}")
+
+    now = time.time()
+    with _auth_lock:
+        _lockouts[email] = now + float(duration_seconds)
 
 
 def _redis_check_lockout(email: str) -> bool:
     r = get_redis()
     key = f"lockout:{email}"
     if r:
-        return r.get(key) is not None
-    else:
+        try:
+            val = r.get(key)
+            if val is not None:
+                return True
+        except Exception as e:
+            logger.warning(f"Redis check lockout error: {e}")
+
+    now = time.time()
+    with _auth_lock:
         exp = _lockouts.get(email)
-        if exp and exp > datetime.now(timezone.utc):
-            return True
-        elif exp:
-            del _lockouts[email]
-        return False
+        if exp is not None:
+            if now < exp:
+                return True
+            else:
+                _lockouts.pop(email, None)
+    return False
 
 
 def _redis_clear_fail(email: str):
     r = get_redis()
     if r:
-        r.delete(f"fail:{email}")
-    else:
+        try:
+            r.delete(f"fail:{email}")
+            r.delete(f"lockout:{email}")
+        except Exception as e:
+            logger.warning(f"Redis clear fail error: {e}")
+
+    with _auth_lock:
         _fail_counts.pop(email, None)
+        _lockouts.pop(email, None)
 
 
 def login(db: Session, email: str, password: str, ip: str,
@@ -83,16 +154,38 @@ def login(db: Session, email: str, password: str, ip: str,
         db.commit()
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Lockout check
-    if getattr(user, "is_locked", False):
-        session_repo.record_login(db, email, "locked_out", ip, user_agent, user.id)
-        db.commit()
-        raise PermissionError("Account is locked due to multiple failed password attempts. Please login via OTP to unlock.")
+    # 1. Lockout check — Expiry-aware evaluation
+    is_active_lockout = _redis_check_lockout(email)
 
-    if _redis_check_lockout(email):
+    if not is_active_lockout and getattr(user, "is_locked", False):
+        # Database flag is set. Check if the 15-minute window has elapsed using LoginHistory
+        from backend.app.models.login_history import LoginHistory, LoginOutcomeEnum
+        last_lock = (
+            db.query(LoginHistory)
+            .filter(LoginHistory.user_id == user.id, LoginHistory.outcome == LoginOutcomeEnum.locked_out)
+            .order_by(LoginHistory.attempted_at.desc())
+            .first()
+        )
+        now_utc = datetime.now(timezone.utc)
+        if last_lock and last_lock.attempted_at:
+            attempted_at = last_lock.attempted_at
+            if attempted_at.tzinfo is None:
+                attempted_at = attempted_at.replace(tzinfo=timezone.utc)
+            lock_age = (now_utc - attempted_at).total_seconds()
+            if lock_age < 900:
+                is_active_lockout = True
+                _redis_set_lockout(email, int(900 - lock_age))
+
+        if not is_active_lockout:
+            # 15-minute temporary lockout has expired! Automatically unlock user.
+            user.is_locked = False
+            _redis_clear_fail(email)
+            db.commit()
+
+    if is_active_lockout or getattr(user, "is_locked", False):
         session_repo.record_login(db, email, "locked_out", ip, user_agent, user.id)
         db.commit()
-        raise PermissionError("Account temporarily locked. Please wait 15 minutes and try again.")
+        raise PermissionError("Account temporarily locked due to multiple failed attempts. Please wait 15 minutes or login via OTP to unlock.")
 
     if not user.is_active and not user.must_reset_password:
         raise PermissionError("Account is inactive. Contact the administrator.")
@@ -102,9 +195,10 @@ def login(db: Session, email: str, password: str, ip: str,
         count = _redis_incr_fail(email)
         if count >= 5:
             user.is_locked = True
+            _redis_set_lockout(email, 900)
             session_repo.record_login(db, email, "locked_out", ip, user_agent, user.id)
             db.commit()
-            raise PermissionError("Account locked due to 5 failed attempts. Please login via OTP to unlock.")
+            raise PermissionError("Account locked due to 5 failed attempts. Please wait 15 minutes or login via OTP to unlock.")
         session_repo.record_login(db, email, "bad_password", ip, user_agent, user.id)
         db.commit()
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -114,10 +208,13 @@ def login(db: Session, email: str, password: str, ip: str,
         db.commit()
 
     _redis_clear_fail(email)
-    
+    if getattr(user, "is_locked", False):
+        user.is_locked = False
+        db.commit()
+
     # Duplicate login block: auto-logout older sessions on other devices
     session_repo.revoke_all_user_sessions(db, user.id)
-    
+
     session_repo.record_login(db, email, "success", ip, user_agent, user.id)
 
     if user.must_reset_password:
@@ -264,6 +361,7 @@ def verify_otp_code(db: Session, email: str, otp_code: str, purpose: str,
             user = user_repo.get_by_email(db, email)
             if user:
                 user.is_locked = True
+                session_repo.record_login(db, email, "locked_out", ip or "0.0.0.0", user_agent, user.id)
             db.commit()
             raise PermissionError("Too many incorrect OTP attempts. Account locked for 15 minutes.")
             
@@ -329,11 +427,19 @@ def verify_otp_code(db: Session, email: str, otp_code: str, purpose: str,
 def reset_password(db: Session, reset_token: str, new_password: str) -> bool:
     try:
         payload = decode_token(reset_token)
-        if payload.get("purpose") != "password_reset":
+        if payload.get("type") != "short" or payload.get("purpose") != "password_reset":
             raise ValueError("Invalid token")
-        user_id = payload["sub"]
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("Invalid token")
     except Exception:
         raise ValueError("Invalid or expired reset token")
+
+    # Replay protection: check if reset token was already consumed
+    jti = payload.get("jti")
+    token_identifier = jti or hash_token(reset_token)
+    if _is_reset_token_consumed(token_identifier):
+        raise ValueError("Reset token has already been used")
 
     if not validate_password_policy(new_password):
         raise ValueError("Password must be between 6 and 12 characters with at least one letter and one digit")
@@ -350,6 +456,16 @@ def reset_password(db: Session, reset_token: str, new_password: str) -> bool:
 
     # Revoke all existing sessions for security
     session_repo.revoke_all_user_sessions(db, user.id)
+
+    # Mark reset token as consumed for its remaining lifetime
+    exp_claim = payload.get("exp")
+    if exp_claim:
+        now_ts = datetime.now(timezone.utc).timestamp()
+        duration = max(60, int(exp_claim - now_ts))
+    else:
+        duration = 600
+    _mark_reset_token_consumed(token_identifier, duration)
+
     audit_service.log(db, "auth.password_reset", actor_user_id=user.id,
                       entity_type="user", entity_id=user.id)
     db.commit()
@@ -368,6 +484,17 @@ def refresh_access_token(db: Session, refresh_token: str) -> Optional[str]:
     token_hash = hash_token(refresh_token)
     session = session_repo.get_session_by_token_hash(db, token_hash)
     if not session or session.revoked_at:
+        # Check if the token was previously revoked (reuse detection / possible breach)
+        from backend.app.models.active_session import ActiveSession
+        revoked_sess = db.query(ActiveSession).filter(
+            ActiveSession.refresh_token_hash == token_hash,
+            ActiveSession.revoked_at.isnot(None)
+        ).first()
+        if revoked_sess:
+            logger.warning(
+                f"Security alert: attempt to use revoked refresh token for user {user_id}, "
+                f"session {revoked_sess.id}"
+            )
         return None
 
     user = user_repo.get_by_id(db, uuid.UUID(user_id))

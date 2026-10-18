@@ -30,6 +30,27 @@ def check_env():
         print("  -> Then run: python main.py\n")
         sys.exit(1)
 
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    if env == "production":
+        jwt_key = (os.getenv("JWT_SECRET_KEY") or "").strip()
+        insecure_placeholders = {
+            "change-this-secret",
+            "secret",
+            "jwt-secret",
+            "your-secret-key",
+            "your-secret",
+            "generate_your_64_char_secure_random_string_here",
+            "password",
+            "admin",
+            "12345678",
+            "default",
+        }
+        if jwt_key.lower() in insecure_placeholders or len(jwt_key) < 32 or len(set(jwt_key)) < 10:
+            print("\n[ERROR] Insecure, short, or low-entropy JWT_SECRET_KEY in production.")
+            print("  -> Production requires at least 32 cryptographically secure random characters.")
+            print("  -> Run: python backend/scripts/generate_secrets.py to generate a secure key.\n")
+            sys.exit(1)
+
 def check_database():
     """Test PostgreSQL connectivity."""
     try:

@@ -4,7 +4,7 @@ Loads all configuration from environment variables / .env file.
 """
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, model_validator
-from typing import List
+from typing import List, Set, ClassVar
 import os
 
 
@@ -49,10 +49,60 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRE_HOURS: int = 168
     JWT_ALGORITHM: str = "HS256"
 
+    INSECURE_JWT_PLACEHOLDERS: ClassVar[Set[str]] = {
+        "change-this-secret",
+        "secret",
+        "jwt-secret",
+        "your-secret-key",
+        "your-secret",
+        "generate_your_64_char_secure_random_string_here",
+        "password",
+        "admin",
+        "12345678",
+        "default",
+    }
+
     @model_validator(mode="after")
-    def sync_jwt_refresh_hours(self):
+    def validate_jwt_and_auth_settings(self):
+        # Sync refresh token expiry hours
         if self.JWT_REFRESH_EXPIRE_DAYS:
             self.JWT_REFRESH_EXPIRE_HOURS = self.JWT_REFRESH_EXPIRE_DAYS * 24
+
+        # Validate JWT signing algorithm (strictly allow secure symmetric algorithms)
+        allowed_algorithms = {"HS256", "HS384", "HS512"}
+        algo = (self.JWT_ALGORITHM or "").strip().upper()
+        if not algo or algo not in allowed_algorithms:
+            raise ValueError(
+                f"Invalid or insecure JWT_ALGORITHM '{self.JWT_ALGORITHM}'. "
+                f"Allowed symmetric algorithms: {', '.join(sorted(allowed_algorithms))}."
+            )
+
+        # Validate JWT signing secret key
+        key = (self.JWT_SECRET_KEY or "").strip()
+        if not key:
+            raise ValueError("JWT_SECRET_KEY must not be empty.")
+
+        key_lower = key.lower()
+        is_placeholder = key_lower in self.INSECURE_JWT_PLACEHOLDERS
+
+        if self.is_production:
+            if is_placeholder:
+                raise ValueError(
+                    "JWT_SECRET_KEY is using an insecure default or placeholder value in production. "
+                    "Production requires an explicitly configured, cryptographically secure random secret."
+                )
+            if len(key) < 32:
+                raise ValueError(
+                    f"JWT_SECRET_KEY is too short ({len(key)} characters) for production. "
+                    "Cryptographic signing with HMAC-SHA256 requires at least 32 characters (256 bits)."
+                )
+            if len(set(key)) < 10:
+                raise ValueError(
+                    "JWT_SECRET_KEY has insufficient character diversity / entropy. "
+                    "Repetitive or predictable strings cannot be used as production secrets. "
+                    "Generate a cryptographically secure random key using a CSPRNG."
+                )
+
         return self
 
     # Email
@@ -188,11 +238,19 @@ class Settings(BaseSettings):
     WHATSAPP_MAX_RETRIES: int = 3
 
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"
+    ALLOWED_ORIGINS: str = (
+        "http://localhost:8000,"
+        "http://127.0.0.1:8000,"
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000,"
+        "https://akritidc.onrender.com,"
+        "https://akritidc.in,"
+        "https://www.akritidc.in"
+    )
 
     @property
     def cors_origins(self) -> List[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        return [o.strip().rstrip("/") for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     @property
     def is_production(self) -> bool:

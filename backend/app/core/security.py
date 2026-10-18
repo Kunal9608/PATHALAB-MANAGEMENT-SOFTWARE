@@ -82,12 +82,14 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def create_short_lived_token(user_id: str, purpose: str = "password_reset", minutes: int = 10) -> str:
+    import uuid
     expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     payload = {
         "sub": str(user_id),
         "exp": expire,
         "purpose": purpose,
         "type": "short",
+        "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 

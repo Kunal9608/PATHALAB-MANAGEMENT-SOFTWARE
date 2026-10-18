@@ -31,32 +31,102 @@ const Copilot = (() => {
   }
 
   function escapeHtml(str) {
-    if (!str) return '';
+    if (str === null || str === undefined) return '';
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function decodeHtmlEntities(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&#(\d+);?/g, (m, dec) => String.fromCharCode(parseInt(dec, 10)))
+      .replace(/&#x([0-9a-fA-F]+);?/g, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  function sanitizeUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return null;
+    const decoded = decodeHtmlEntities(rawUrl);
+    const cleaned = decoded.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    if (!cleaned) return null;
+
+    // Reject URLs with raw spaces, quotes, angle brackets, or backslashes
+    if (/["'<>\s\\]/.test(cleaned)) {
+      return null;
+    }
+
+    // Reject protocol-relative traversal schemes
+    if (cleaned.startsWith('//')) {
+      return null;
+    }
+
+    // Permit safe relative paths and fragment anchors genuinely needed by app
+    if (cleaned.startsWith('/') || cleaned.startsWith('./') || cleaned.startsWith('../') || cleaned.startsWith('#')) {
+      return cleaned;
+    }
+
+    // Validate scheme against strict allowlist: http, https, mailto, tel
+    const schemeMatch = cleaned.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+    if (!schemeMatch) {
+      const firstColon = cleaned.indexOf(':');
+      const firstSlash = cleaned.indexOf('/');
+      if (firstColon !== -1 && (firstSlash === -1 || firstColon < firstSlash)) {
+        return null;
+      }
+      return cleaned;
+    }
+
+    const scheme = schemeMatch[1].toLowerCase();
+    const allowedSchemes = ['http', 'https', 'mailto', 'tel'];
+    if (!allowedSchemes.includes(scheme)) {
+      return null;
+    }
+
+    try {
+      const base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'http://localhost';
+      const parsed = new URL(cleaned, base);
+      const proto = parsed.protocol.replace(':', '').toLowerCase();
+      if (!allowedSchemes.includes(proto)) {
+        return null;
+      }
+      return cleaned;
+    } catch (e) {
+      return null;
+    }
   }
 
   function renderPatientCard(data) {
-    const isPaid = (data.due || 0) <= 0 || (data.pay_status || '').toLowerCase().includes('paid');
-    const isReady = (data.status || '').toLowerCase().includes('ready');
+    if (!data || typeof data !== 'object') return '';
+
+    const dueAmount = Number(data.due) || 0;
+    const totalAmount = Number(data.total) || 0;
+    const paidAmount = Number(data.paid) || 0;
+    const isPaid = dueAmount <= 0 || String(data.pay_status || '').toLowerCase().includes('paid');
+    const statusStr = String(data.status || '');
+    const isReady = statusStr.toLowerCase().includes('ready');
     
     // Status Badge
     let statusClass = 'cpc-badge-default';
     if (isReady) statusClass = 'cpc-badge-success';
-    else if ((data.status || '').toLowerCase().includes('collected')) statusClass = 'cpc-badge-info';
-    else if ((data.status || '').toLowerCase().includes('pending')) statusClass = 'cpc-badge-warning';
+    else if (statusStr.toLowerCase().includes('collected')) statusClass = 'cpc-badge-info';
+    else if (statusStr.toLowerCase().includes('pending')) statusClass = 'cpc-badge-warning';
 
     // Payment Badge
     const payClass = isPaid ? 'cpc-badge-success' : 'cpc-badge-warning';
-    const payText = isPaid ? 'Paid' : `Due ₹${data.due || 0}`;
+    const payText = isPaid ? 'Paid' : `Due ₹${dueAmount}`;
 
     // Test chips
     let testChipsHtml = '';
-    const testList = Array.isArray(data.tests) ? data.tests : (data.tests || '').split(',');
-    const validTests = testList.map(t => t.trim()).filter(Boolean);
+    const testList = Array.isArray(data.tests) ? data.tests : String(data.tests || '').split(',');
+    const validTests = testList.map(t => String(t).trim()).filter(Boolean);
     if (validTests.length > 0) {
       testChipsHtml = validTests.map(t => `<span class="cpc-chip">${escapeHtml(t)}</span>`).join('');
     } else {
@@ -67,10 +137,16 @@ const Copilot = (() => {
     let reportHtml = '';
     const reportObj = data.report || (data.report_url ? { download_url: data.report_url, version_label: data.report_version } : null);
     if (reportObj && reportObj.download_url) {
-      const vText = reportObj.version_label ? `(${reportObj.version_label})` : '';
-      reportHtml = `<a href="${reportObj.download_url}" target="_blank" rel="noopener noreferrer" class="cpc-btn-report">
-        ${SVGS.download} Download Report ${vText}
-      </a>`;
+      const safeDownloadUrl = sanitizeUrl(reportObj.download_url);
+      const vText = reportObj.version_label ? ` (${escapeHtml(reportObj.version_label)})` : '';
+      if (safeDownloadUrl) {
+        const escapedUrl = escapeHtml(safeDownloadUrl);
+        reportHtml = `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="cpc-btn-report">
+          ${SVGS.download} Download Report${vText}
+        </a>`;
+      } else {
+        reportHtml = `<span class="cpc-report-pending">${SVGS.report} Invalid report link${vText}</span>`;
+      }
     } else {
       reportHtml = `<span class="cpc-report-pending">${SVGS.report} No reports uploaded yet</span>`;
     }
@@ -91,8 +167,8 @@ const Copilot = (() => {
           <span class="cpc-patient-code">${escapeHtml(data.code || '')}</span>
         </div>
         <div class="cpc-badges">
-          <span class="cpc-badge ${statusClass}">${escapeHtml(data.status || 'Active')}</span>
-          <span class="cpc-badge ${payClass}">${payText}</span>
+          <span class="cpc-badge ${escapeHtml(statusClass)}">${escapeHtml(data.status || 'Active')}</span>
+          <span class="cpc-badge ${escapeHtml(payClass)}">${escapeHtml(payText)}</span>
         </div>
       </div>
 
@@ -109,11 +185,11 @@ const Copilot = (() => {
       </div>
 
       <div class="cpc-finance-bar">
-        <div class="cpc-fin-item"><span class="cpc-fin-lbl">Total</span><span class="cpc-fin-val">₹${data.total || 0}</span></div>
+        <div class="cpc-fin-item"><span class="cpc-fin-lbl">Total</span><span class="cpc-fin-val">₹${totalAmount}</span></div>
         <div class="cpc-fin-sep"></div>
-        <div class="cpc-fin-item"><span class="cpc-fin-lbl">Paid</span><span class="cpc-fin-val text-success">₹${data.paid || 0}</span></div>
+        <div class="cpc-fin-item"><span class="cpc-fin-lbl">Paid</span><span class="cpc-fin-val text-success">₹${paidAmount}</span></div>
         <div class="cpc-fin-sep"></div>
-        <div class="cpc-fin-item"><span class="cpc-fin-lbl">Due</span><span class="cpc-fin-val ${data.due > 0 ? 'text-danger' : 'text-success'}">₹${data.due || 0}</span></div>
+        <div class="cpc-fin-item"><span class="cpc-fin-lbl">Due</span><span class="cpc-fin-val ${dueAmount > 0 ? 'text-danger' : 'text-success'}">₹${dueAmount}</span></div>
       </div>
 
       ${abnormalHtml}
@@ -181,56 +257,81 @@ const Copilot = (() => {
     s = s.replace(/^[ \t]*[*•-][ \t]*$/gm, '');
 
     // 3. Escape HTML entities
-    s = s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    s = escapeHtml(s);
 
-    // 4. Header Cards (e.g. **Patient Record: ...**)
+    // 4. Multi-line fenced code blocks ```code```
+    s = s.replace(/```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, (m, code) => {
+      return `<pre class="copilot-code-block"><code class="copilot-inline-code">${code.trim()}</code></pre>`;
+    });
+
+    // 5. Markdown tables
+    s = s.replace(/((?:^[ \t]*\|.+?\|[ \t]*(?:\r?\n|$))+)/gm, (match) => {
+      const lines = match.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) return match;
+      if (!/^\|(?:\s*:?-+:?\s*\|)+$/.test(lines[1])) return match;
+      const parseRow = (line) => line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const headers = parseRow(lines[0]);
+      const ths = headers.map(h => `<th>${h}</th>`).join('');
+      let rowsHtml = '';
+      for (let i = 2; i < lines.length; i++) {
+        if (!lines[i].includes('|')) continue;
+        const cells = parseRow(lines[i]);
+        const tds = cells.map(c => `<td>${c}</td>`).join('');
+        rowsHtml += `<tr>${tds}</tr>`;
+      }
+      return `<div class="table-wrapper" style="margin:8px 0; overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12px;"><thead><tr>${ths}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+    });
+
+    // 6. Header Cards (e.g. **Patient Record: ...**)
     s = s.replace(/^\*\*Patient Record:\s*(.+?)\*\*$/gm, (m, title) => {
       return `<div class="copilot-card-header">${SVGS.patient} <span>${title}</span></div>`;
     });
 
-    // 5. Convert markdown headers (### Header, ## Header, # Header) to styled headers with SVG
+    // 7. Convert markdown headers (### Header, ## Header, # Header) to styled headers with SVG
     s = s.replace(/^[ \t]*#{1,4}[ \t]+(.+)$/gm, (m, hdr) => {
       const icon = getSvgForLabel(hdr);
       return `<div class="copilot-section-header">${icon}<span>${hdr}</span></div>`;
     });
 
-    // 6. Convert bullet items with key labels (• **Label:** Value) into clean SVG-badged items
+    // 8. Convert bullet items with key labels (• **Label:** Value) into clean SVG-badged items
     s = s.replace(/^[ \t]*[•*+-][ \t]+\*\*([^*:]+):\*\*[ \t]*(.*)$/gm, (m, label, val) => {
       const icon = getSvgForLabel(label);
       return `<div class="copilot-list-item">${icon}<strong>${label}:</strong> <span>${val}</span></div>`;
     });
 
-    // 7. Any remaining bullets (* item, - item, • item)
+    // 9. Any remaining bullets (* item, - item, • item)
     s = s.replace(/^[ \t]*[•*+-][ \t]+(.+)$/gm, `<div class="copilot-list-item"><span class="copilot-bullet">•</span> $1</div>`);
 
-    // 8. Numbered lists (1. item)
+    // 10. Numbered lists (1. item)
     s = s.replace(/^[ \t]*(\d+)\.[ \t]+(.+)$/gm, '<div class="copilot-list-item"><span class="copilot-num">$1.</span> $2</div>');
 
-    // 9. Bold **text**
+    // 11. Bold **text**
     s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 
-    // 10. Italic *text* (word level only)
+    // 12. Italic *text* (word level only)
     s = s.replace(/(^|[^\*])\*([^\*\n]+)\*([^\*]|$)/g, '$1<em>$2</em>$3');
 
-    // 11. Inline code `code`
+    // 13. Inline code `code`
     s = s.replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>');
 
-    // 12. Links: convert report links into sleek buttons
-    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, txt, url) => {
+    // 14. Links: validate protocol and sanitize URL destinations
+    s = s.replace(/\[([^\]]+)\]\(((?:[^\s()]+|\([^\s()]*\))+)\)/g, (m, txt, rawUrl) => {
+      const safeUrl = sanitizeUrl(rawUrl);
+      if (!safeUrl) {
+        return `<span class="copilot-link copilot-link-disabled">${txt}</span>`;
+      }
+      const escapedUrl = escapeHtml(safeUrl);
       const isReport = txt.toLowerCase().includes('report') || txt.toLowerCase().includes('download') || txt.toLowerCase().includes('view');
       if (isReport) {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="copilot-report-btn">${SVGS.download} ${txt}</a>`;
+        return `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="copilot-report-btn">${SVGS.download} ${txt}</a>`;
       }
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="copilot-link">${txt}</a>`;
+      return `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="copilot-link">${txt}</a>`;
     });
 
-    // 13. Highlight Doctor Review / Abnormal badges
+    // 15. Highlight Doctor Review / Abnormal badges
     s = s.replace(/\((?:Requires Doctor Review|ABNORMAL)\)/gi, `<span class="copilot-badge-abnormal">${SVGS.alert} Doctor Review</span>`);
 
-    // 14. Clean up any newlines around <div> tags to prevent empty blank lines
+    // 16. Clean up any newlines around <div> tags to prevent empty blank lines
     s = s.replace(/<\/div>\n+/g, '</div>');
     s = s.replace(/\n+<div/g, '<div');
     s = s.replace(/\n\n+/g, '<br><br>');
@@ -289,7 +390,7 @@ const Copilot = (() => {
         </div>
         <div class="copilot-body" id="copilot-messages">
           <div class="copilot-msg system">
-            Hi ${window._me?.name || 'there'}! I'm your PathLab AI assistant. How can I help you today?
+            Hi ${escapeHtml(window._me?.name || 'there')}! I'm your PathLab AI assistant. How can I help you today?
           </div>
         </div>
         <div class="copilot-footer">
@@ -315,7 +416,7 @@ const Copilot = (() => {
         if (container) {
           container.innerHTML = `
             <div class="copilot-msg system">
-              Hi ${window._me?.name || 'there'}! Memory reset. How can I help you today?
+              Hi ${escapeHtml(window._me?.name || 'there')}! Memory reset. How can I help you today?
             </div>
           `;
         }
@@ -460,7 +561,22 @@ const Copilot = (() => {
     }
   }
 
-  return { init: initUI, toggle: toggleDrawer, close: closeDrawer };
+  return {
+    init: initUI,
+    toggle: toggleDrawer,
+    close: closeDrawer,
+    formatMarkdown,
+    renderPatientCard,
+    parseAndRenderMarkdownCard,
+    sanitizeUrl,
+    escapeHtml
+  };
 })();
 
-window.Copilot = Copilot;
+if (typeof window !== 'undefined') {
+  window.Copilot = Copilot;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Copilot;
+}
+

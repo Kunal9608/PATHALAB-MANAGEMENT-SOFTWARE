@@ -2,6 +2,7 @@
 Copilot Cache Manager — Redis-first cache-aside with connection pooling,
 graceful PostgreSQL fallback, versioned keys, and negative caching.
 """
+import os
 import json
 import logging
 import time
@@ -67,10 +68,10 @@ def _get_async_pool() -> Optional[aioredis.ConnectionPool]:
     global _async_pool
     if not getattr(settings, "REDIS_ENABLED", True):
         return None
-    if os.getenv("RENDER") and settings.REDIS_URL in ("redis://localhost:6379/0", "redis://localhost:6379", ""):
-        return None
-    if _async_pool is None:
-        try:
+    try:
+        if os.getenv("RENDER") and settings.REDIS_URL in ("redis://localhost:6379/0", "redis://localhost:6379", ""):
+            return None
+        if _async_pool is None:
             kwargs = {
                 "decode_responses": True,
                 "max_connections": 20,
@@ -85,22 +86,26 @@ def _get_async_pool() -> Optional[aioredis.ConnectionPool]:
                 settings.REDIS_URL,
                 **kwargs
             )
-        except Exception as e:
-            logger.warning(f"Failed to create Redis connection pool: {e}")
-            return None
+    except Exception as e:
+        logger.warning(f"Failed to create Redis connection pool: {e}")
+        return None
     return _async_pool
 
 
 def get_async_redis() -> Optional[aioredis.Redis]:
     global _async_redis_client, _redis_available, _last_error_log_time
-    if not settings.REDIS_ENABLED:
+    if not getattr(settings, "REDIS_ENABLED", True):
         return None
-    pool = _get_async_pool()
-    if pool is None:
+    try:
+        pool = _get_async_pool()
+        if pool is None:
+            return None
+        if _async_redis_client is None:
+            _async_redis_client = aioredis.Redis(connection_pool=pool)
+        return _async_redis_client
+    except Exception as e:
+        logger.warning(f"Failed to get async Redis client: {e}")
         return None
-    if _async_redis_client is None:
-        _async_redis_client = aioredis.Redis(connection_pool=pool)
-    return _async_redis_client
 
 
 # ── Key Generators ─────────────────────────────────────────────────────────────

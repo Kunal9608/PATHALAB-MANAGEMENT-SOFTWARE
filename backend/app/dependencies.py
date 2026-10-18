@@ -34,12 +34,17 @@ def get_current_user(
 
     try:
         payload = decode_token(token)
-        user_id = payload.get("sub")
-        sid = payload.get("sid")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    token_type = payload.get("type")
+    if token_type != "access":
+        raise HTTPException(status_code=401, detail="Invalid token type: access token required")
+
+    user_id = payload.get("sub")
+    sid = payload.get("sid")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     if not sid:
         raise HTTPException(status_code=401, detail="Session has been terminated or is invalid")
@@ -57,7 +62,8 @@ def get_current_user(
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != RoleEnum.admin:
+    user_role = getattr(current_user.role, "value", current_user.role)
+    if user_role != RoleEnum.admin and user_role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
@@ -103,11 +109,13 @@ def get_idempotency_key(
 
 def check_patient_access(current_user: User, patient) -> None:
     """Enforce patient access scope: admin, full scope, or own registered patients."""
-    if current_user.role == RoleEnum.admin:
+    user_role = getattr(current_user.role, "value", current_user.role)
+    if user_role == RoleEnum.admin or user_role == "admin":
         return
-    if current_user.view_scope == ViewScopeEnum.all:
+    user_scope = getattr(current_user.view_scope, "value", current_user.view_scope)
+    if user_scope == ViewScopeEnum.all or user_scope == "all":
         return
-    if patient.collected_by == current_user.id:
+    if str(getattr(patient, "collected_by", None)) == str(current_user.id):
         return
     raise HTTPException(
         status_code=403,

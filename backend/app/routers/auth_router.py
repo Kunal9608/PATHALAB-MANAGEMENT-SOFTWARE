@@ -1,6 +1,8 @@
 """Auth router."""
 from fastapi import APIRouter, Depends, Response, Request, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from backend.app.core.db import get_db
 from backend.app.dependencies import get_current_user, get_client_ip
@@ -44,15 +46,42 @@ def login(payload: LoginRequest, request: Request, response: Response,
     return result
 
 
+security_bearer = HTTPBearer(auto_error=False)
+
 @router.post("/logout")
-def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+def logout(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+):
+    from backend.app.core.security import hash_token, decode_token
+    from backend.app.repositories import session_repo as srepo
+    import uuid
+
+    # 1. Revoke session associated with refresh token cookie if present
     refresh = request.cookies.get("refresh_token")
     if refresh:
-        from backend.app.core.security import hash_token
-        from backend.app.repositories import session_repo as srepo
         token_hash = hash_token(refresh)
         srepo.revoke_session_by_token_hash(db, token_hash)
-        db.commit()
+
+    # 2. Revoke session associated with access token (from Authorization header or cookie)
+    access_token = None
+    if credentials and credentials.credentials:
+        access_token = credentials.credentials
+    elif request.cookies.get("access_token"):
+        access_token = request.cookies.get("access_token")
+
+    if access_token:
+        try:
+            payload = decode_token(access_token)
+            sid = payload.get("sid")
+            if sid:
+                srepo.revoke_session(db, uuid.UUID(sid))
+        except Exception:
+            pass
+
+    db.commit()
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
@@ -112,13 +141,18 @@ def reset_password(payload: PasswordResetRequest, request: Request, response: Re
 
     try:
         token_payload = decode_token(payload.reset_token)
-        if token_payload.get("purpose") != "password_reset":
+        if token_payload.get("type") != "short" or token_payload.get("purpose") != "password_reset":
             raise ValueError("Invalid token")
-        user_id = token_payload["sub"]
+        user_id = token_payload.get("sub")
+        if not user_id:
+            raise ValueError("Invalid token: missing subject")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
-    auth_service.reset_password(db, payload.reset_token, payload.new_password)
+    try:
+        auth_service.reset_password(db, payload.reset_token, payload.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     user = user_repo.get_by_id(db, uuid.UUID(user_id))
     if not user:

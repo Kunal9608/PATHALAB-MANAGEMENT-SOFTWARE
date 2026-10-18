@@ -40,9 +40,10 @@ FRONTEND_DIR = ROOT / "frontend"
 async def lifespan(app: FastAPI):
     """Startup: initialize DB tables if they don't exist (fallback for no Alembic)."""
     if settings.is_production:
-        if settings.JWT_SECRET_KEY == "change-this-secret":
+        key = (settings.JWT_SECRET_KEY or "").strip()
+        if not key or key.lower() in getattr(settings, "INSECURE_JWT_PLACEHOLDERS", {"change-this-secret"}) or len(key) < 32 or len(set(key)) < 10:
             import sys
-            print("  [FATAL] JWT_SECRET_KEY is using the default insecure value in production. Exiting.")
+            print("  [FATAL] JWT_SECRET_KEY is insecure, missing, too short, or lacks entropy in production. Exiting.")
             sys.exit(1)
             
     for attempt in range(1, 4):
@@ -85,13 +86,22 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
+ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+ALLOWED_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "Idempotency-Key",
+    "Accept",
+    "Origin",
+    "X-Requested-With",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
 )
 
 

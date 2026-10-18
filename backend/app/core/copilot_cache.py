@@ -65,16 +65,25 @@ def _invalidate_l1(prefix_or_sub: str):
 
 def _get_async_pool() -> Optional[aioredis.ConnectionPool]:
     global _async_pool
-    if not settings.REDIS_ENABLED:
+    if not getattr(settings, "REDIS_ENABLED", True):
+        return None
+    if os.getenv("RENDER") and settings.REDIS_URL in ("redis://localhost:6379/0", "redis://localhost:6379", ""):
         return None
     if _async_pool is None:
         try:
+            kwargs = {
+                "decode_responses": True,
+                "max_connections": 20,
+                "socket_connect_timeout": 2.0,
+                "socket_timeout": 2.0,
+            }
+            if settings.REDIS_URL.startswith("rediss://"):
+                import ssl
+                kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+
             _async_pool = aioredis.ConnectionPool.from_url(
                 settings.REDIS_URL,
-                decode_responses=True,
-                max_connections=20,
-                socket_connect_timeout=0.5,
-                socket_timeout=1.0,
+                **kwargs
             )
         except Exception as e:
             logger.warning(f"Failed to create Redis connection pool: {e}")

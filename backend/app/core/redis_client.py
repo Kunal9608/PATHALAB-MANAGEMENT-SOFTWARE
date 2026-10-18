@@ -17,10 +17,30 @@ def get_redis():
     if (now - _last_fail_time) < RECONNECT_COOLDOWN_SECONDS:
         return None
     try:
-        import redis
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
         from backend.app.config import settings
-        r = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=0.5)
+
+        if not getattr(settings, "REDIS_ENABLED", True):
+            return None
+
+        # On Render without an external REDIS_URL, localhost:6379 does not exist.
+        # Avoid hanging on connection attempts by defaulting directly to in-memory fallback.
+        if os.getenv("RENDER") and settings.REDIS_URL in ("redis://localhost:6379/0", "redis://localhost:6379", ""):
+            _last_fail_time = now + 86400  # Silence repeated attempts
+            _logger.info("Render environment detected without external REDIS_URL configured; using in-memory fallback.")
+            return None
+
+        import redis
+        kwargs = {
+            "decode_responses": True,
+            "socket_connect_timeout": 2.0,
+            "socket_timeout": 2.0,
+        }
+        if settings.REDIS_URL.startswith("rediss://"):
+            import ssl
+            kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+
+        r = redis.from_url(settings.REDIS_URL, **kwargs)
         r.ping()
         _redis_client = r
         _last_fail_time = 0.0
@@ -35,3 +55,4 @@ def reset_redis():
     global _redis_client, _last_fail_time
     _redis_client = None
     _last_fail_time = time.time()
+

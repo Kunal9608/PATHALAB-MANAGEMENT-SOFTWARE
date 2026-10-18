@@ -56,9 +56,19 @@ def check_database():
 def check_redis():
     """Test Redis connectivity."""
     try:
-        import redis as redis_lib
+        if not os.getenv("REDIS_ENABLED", "true").lower() in ("true", "1", "yes"):
+            print("  [OK] Redis disabled in configuration (In-Memory Fallback Mode)")
+            return True
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        r = redis_lib.from_url(redis_url, socket_connect_timeout=1)
+        if os.getenv("RENDER") and redis_url in ("redis://localhost:6379/0", "redis://localhost:6379", ""):
+            print("  [OK] Redis not configured on Render (In-Memory Fallback Mode)")
+            return True
+        import redis as redis_lib
+        kwargs = {"socket_connect_timeout": 1.5}
+        if redis_url.startswith("rediss://"):
+            import ssl
+            kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+        r = redis_lib.from_url(redis_url, **kwargs)
         r.ping()
         print("  [OK] Redis connected")
         return True

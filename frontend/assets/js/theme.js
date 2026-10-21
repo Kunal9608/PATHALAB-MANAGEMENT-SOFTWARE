@@ -11,7 +11,9 @@
 (function () {
   const path = window.location.pathname;
   const isProtected = path.includes('/admin/') || path.includes('/staff/') || path.includes('/profile');
-  if (isProtected) {
+  const isErrorPage = path === '/404' || path === '/404.html' || path === '/offline' || path === '/offline.html' ||
+                      (document.title && (document.title.includes('404') || document.title.includes('Offline')));
+  if (isProtected && !isErrorPage) {
     const style = document.createElement('style');
     style.id = 'page-blocking-style';
     style.innerHTML = 'body { display: none !important; }';

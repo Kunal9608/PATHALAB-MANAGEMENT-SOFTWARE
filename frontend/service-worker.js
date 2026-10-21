@@ -7,7 +7,7 @@
  *  - HTML pages: Network-first, fallback to cache, then offline page
  */
 
-const CACHE_VERSION = 'akriti-v3';
+const CACHE_VERSION = 'akriti-v4';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const PAGES_CACHE   = `${CACHE_VERSION}-pages`;
 

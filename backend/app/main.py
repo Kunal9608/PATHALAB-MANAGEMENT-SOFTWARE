@@ -138,6 +138,19 @@ async def clean_urls_middleware(request: Request, call_next):
             from fastapi.responses import FileResponse
             return FileResponse(str(file_path), media_type="text/html")
 
+    # Explicit handling for error pages without redirect loops
+    if path in ("/404", "/404.html"):
+        file_path = FRONTEND_DIR / "404.html"
+        if file_path.is_file():
+            from fastapi.responses import FileResponse
+            return FileResponse(str(file_path), media_type="text/html", status_code=404 if path != "/404.html" else 200)
+
+    if path in ("/offline", "/offline.html"):
+        file_path = FRONTEND_DIR / "offline.html"
+        if file_path.is_file():
+            from fastapi.responses import FileResponse
+            return FileResponse(str(file_path), media_type="text/html")
+
     # Check if request is for a clean HTML path (e.g. /admin/dashboard)
     last_segment = path.split("/")[-1]
     if not path.endswith("/") and "." not in last_segment:
@@ -167,12 +180,12 @@ async def add_security_headers(request: Request, call_next):
     # Allows self, Google Fonts, flatpickr, ChartJS, cloudflare QRcode.js, and Google reCAPTCHA
     csp_directives = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.google.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: blob: https://api.qrserver.com; "
-        "connect-src 'self' https://www.google.com/recaptcha/; "
-        "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; "
+        "connect-src 'self' https://www.google.com https://www.gstatic.com https://www.google.com/recaptcha/; "
+        "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.google.com/; "
         "frame-ancestors 'none';"
     )
     response.headers["Content-Security-Policy"] = csp_directives
@@ -238,26 +251,6 @@ app.include_router(copilot_router.router, prefix=API_PREFIX)
 app.include_router(whatsapp_router.router, prefix=API_PREFIX)
 app.include_router(offline_patient_router.router, prefix=API_PREFIX)
 
-
-# ── Catch-all for unmatched API routes ───────────────────────────────────────
-@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"], include_in_schema=False)
-async def api_catch_all_not_found(request: Request, path: str):
-    import uuid
-    req_id = str(uuid.uuid4())
-    detail_msg = f"API endpoint not found: /api/{path}"
-    return JSONResponse(
-        status_code=404,
-        content={
-            "success": False,
-            "detail": detail_msg,
-            "message": detail_msg,
-            "error": {
-                "code": "RESOURCE_NOT_FOUND",
-                "message": detail_msg,
-                "request_id": req_id
-            }
-        }
-    )
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
@@ -475,6 +468,27 @@ def delete_everything(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=patient_backup_15days.pdf"}
+    )
+
+
+# ── Catch-all for unmatched API routes ───────────────────────────────────────
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"], include_in_schema=False)
+async def api_catch_all_not_found(request: Request, path: str):
+    import uuid
+    req_id = str(uuid.uuid4())
+    detail_msg = f"API endpoint not found: /api/{path}"
+    return JSONResponse(
+        status_code=404,
+        content={
+            "success": False,
+            "detail": detail_msg,
+            "message": detail_msg,
+            "error": {
+                "code": "RESOURCE_NOT_FOUND",
+                "message": detail_msg,
+                "request_id": req_id
+            }
+        }
     )
 
 

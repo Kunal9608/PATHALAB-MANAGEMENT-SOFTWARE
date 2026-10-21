@@ -8,11 +8,23 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
   <meta name="description" content="PathLab OS offline page. Your internet connection appears to be unavailable.">
 
+  <script>
+    // Ensure error page is NEVER hidden by anti-flash styles
+    (function() {
+      const el = document.getElementById('page-blocking-style');
+      if (el) el.remove();
+    })();
+  </script>
   <link rel="stylesheet" href="/assets/css/tokens.css">
   <link rel="stylesheet" href="/assets/css/components.css">
   <script src="/assets/js/theme.js"></script>
 
   <style>
+    html, body {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: var(--font-body, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);

@@ -179,15 +179,17 @@ uploads/
 temp/
 node_modules/
 
-# Databases & local test artifacts
+# Databases & local temporary artifacts
 *.db
 *.sqlite
 *.sqlite3
 backend/app.db
-tests/
-backend/tests/
 seed_patients.py
 backend/seed_patients.py
+tests/
+backend/tests/
+**/tests/
+.pytest_cache/
 
 # WhatsApp Session & Service artifacts (NEVER commit credentials/sessions)
 WHATSAPP/session/*

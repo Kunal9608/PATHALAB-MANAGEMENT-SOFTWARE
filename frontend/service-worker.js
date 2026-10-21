@@ -7,7 +7,7 @@
  *  - HTML pages: Network-first, fallback to cache, then offline page
  */
 
-const CACHE_VERSION = 'akriti-v2';
+const CACHE_VERSION = 'akriti-v3';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const PAGES_CACHE   = `${CACHE_VERSION}-pages`;
 
@@ -29,8 +29,11 @@ const STATIC_ASSETS = [
 
 const HTML_PAGES = [
   '/index.html',
+  '/404.html',
+  '/offline.html',
   '/admin/dashboard.html',
   '/admin/patients.html',
+  '/admin/failed-patients.html',
   '/admin/staff.html',
   '/admin/tests.html',
   '/admin/expenses.html',
@@ -39,10 +42,9 @@ const HTML_PAGES = [
   '/admin/audit-log.html',
   '/admin/settings.html',
   '/admin/add-patient.html',
-  '/admin/add-patient',
   '/staff/add-patient.html',
-  '/staff/add-patient',
   '/staff/patients.html',
+  '/staff/failed-patients.html',
   '/staff/settings.html',
   '/attendance-kiosk.html',
 ];
@@ -115,12 +117,16 @@ self.addEventListener('fetch', event => {
         }
         return res;
       }).catch(async () => {
+        // 1. Check if the exact requested page is available in local cache
         const cached = await caches.match(request, { ignoreSearch: true });
         if (cached) return cached;
-        // Fallback to closest offline shell if specific page not cached
+        // 2. Offline fallback: serve dedicated branded offline page (never 404!)
+        const offlinePage = await caches.match('/offline.html');
+        if (offlinePage) return offlinePage;
+        // 3. Fallback to cached index if offline page not yet primed
         const fallback = await caches.match('/index.html');
         if (fallback) return fallback;
-        return new Response('Offline', { status: 503 });
+        return new Response('PathLab OS is currently offline.', { status: 503, headers: { 'Content-Type': 'text/plain' } });
       })
     );
     return;

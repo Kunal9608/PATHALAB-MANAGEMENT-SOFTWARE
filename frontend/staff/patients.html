@@ -247,10 +247,16 @@
           <h2>Patient List</h2>
           <p id="scope-notice">Loading your patient scope…</p>
         </div>
-        <a href="/staff/add-patient" class="btn" style="background:#ffffff;color:#0a192f;border:none;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,0.15)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          + Add Patient
-        </a>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <a href="/staff/failed-patients" class="btn btn-secondary" style="background:rgba(255,255,255,0.12);color:#fff;border-color:rgba(255,255,255,0.25);font-weight:600">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Failed Registrations
+          </a>
+          <a href="/staff/add-patient" class="btn" style="background:#ffffff;color:#0a192f;border:none;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,0.15)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Add Patient
+          </a>
+        </div>
       </div>
 
       <!-- Filters Bar -->
@@ -1437,32 +1443,32 @@
       let html = '';
       groupedParams.forEach(group => {
         html += `
-          <div class="test-param-card mb-4" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.03)">
-            <div style="background:linear-gradient(135deg, var(--color-primary-tint) 0%, var(--color-bg) 100%);padding:14px 18px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-              <div>
-                <strong style="font-family:var(--font-display);font-size:15px;color:var(--color-ink)">${escapeHtml(group.test_name)}</strong>
-                ${group.test_code ? `<span style="font-size:11px;color:var(--color-ink-muted);background:var(--color-surface);border:1px solid var(--color-border);padding:1px 6px;border-radius:4px;margin-left:8px;font-family:monospace">${escapeHtml(group.test_code)}</span>` : ''}
+          <div class="test-param-card mb-4">
+            <div class="test-param-card-header">
+              <div class="test-param-title-wrap">
+                <strong class="test-param-title">${escapeHtml(group.test_name)}</strong>
+                ${group.test_code ? `<span class="test-param-code">${escapeHtml(group.test_code)}</span>` : ''}
               </div>
-              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="font-size:11px;font-weight:600;color:var(--color-ink-muted);white-space:nowrap">Remarks:</span>
-                  <input type="text" class="form-input test-note-input" id="test-note-${group.test_id}" data-test-id="${group.test_id}" value="${escapeHtml(noteMap[group.test_id] || '')}" placeholder="Optional notes / findings..." style="height:32px;font-size:12px;width:180px">
+              <div class="test-param-header-actions">
+                <div class="test-param-field">
+                  <span class="test-param-field-label">Remarks:</span>
+                  <input type="text" class="form-input test-note-input" id="test-note-${group.test_id}" data-test-id="${group.test_id}" value="${escapeHtml(noteMap[group.test_id] || '')}" placeholder="Optional notes / findings...">
                 </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="font-size:11px;font-weight:600;color:var(--color-ink-muted);white-space:nowrap">Attach Scan / File:</span>
-                  <input type="file" class="form-input test-attachment-file" id="test-att-${group.test_id}" data-test-id="${group.test_id}" accept=".jpg,.jpeg,.png,.webp,.pdf" style="height:32px;font-size:11px;padding:3px;width:180px">
+                <div class="test-param-field">
+                  <span class="test-param-field-label">Attach Scan / File:</span>
+                  <input type="file" class="form-input test-attachment-file" id="test-att-${group.test_id}" data-test-id="${group.test_id}" accept=".jpg,.jpeg,.png,.webp,.pdf">
                 </div>
               </div>
             </div>
-            <div style="padding:16px 18px">
-              <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <div class="test-param-table-wrapper">
+              <table class="data-entry-table">
                 <thead>
-                  <tr style="border-bottom:1px solid var(--color-border);color:var(--color-ink-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.04em">
-                    <th style="padding:8px 6px;text-align:left;width:25%">Parameter</th>
-                    <th style="padding:8px 6px;text-align:left;width:20%">Range</th>
-                    <th style="padding:8px 6px;text-align:left;width:20%">Result</th>
-                    <th style="padding:8px 6px;text-align:left;width:25%">Visualizer</th>
-                    <th style="padding:8px 6px;text-align:center;width:10%">Flag</th>
+                  <tr>
+                    <th style="text-align:left;width:25%">Parameter</th>
+                    <th style="text-align:left;width:20%">Range</th>
+                    <th style="text-align:left;width:20%">Result</th>
+                    <th style="text-align:left;width:25%">Visualizer</th>
+                    <th style="text-align:center;width:10%">Flag</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1473,14 +1479,14 @@
 
                     let inputHtml = '';
                     if (p.input_type === 'numeric') {
-                      inputHtml = `<input type="number" step="any" class="form-input param-input ${isAbn ? 'border-danger' : ''}" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="numeric" data-low="${p.reference_low ?? ''}" data-high="${p.reference_high ?? ''}" value="${escapeHtml(val)}" placeholder="e.g. ${p.reference_low !== null && p.reference_high !== null ? ((p.reference_low + p.reference_high)/2).toFixed(1) : 'Value'}" style="height:34px;font-size:13px;font-weight:600">`;
+                      inputHtml = `<input type="number" step="any" class="form-input param-input ${isAbn ? 'border-danger' : ''}" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="numeric" data-low="${p.reference_low ?? ''}" data-high="${p.reference_high ?? ''}" value="${escapeHtml(val)}" placeholder="e.g. ${p.reference_low !== null && p.reference_high !== null ? ((p.reference_low + p.reference_high)/2).toFixed(1) : 'Value'}">`;
                     } else if (p.input_type === 'dropdown' && Array.isArray(p.dropdown_options) && p.dropdown_options.length > 0) {
-                      inputHtml = `<select class="form-input param-input" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="dropdown" style="height:34px;font-size:13px;font-weight:600">
+                      inputHtml = `<select class="form-input param-input" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="dropdown">
                         <option value="">-- Select --</option>
                         ${p.dropdown_options.map(o => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
                       </select>`;
                     } else {
-                      inputHtml = `<input type="text" class="form-input param-input" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="text" value="${escapeHtml(val)}" placeholder="Enter finding..." style="height:34px;font-size:13px;font-weight:600">`;
+                      inputHtml = `<input type="text" class="form-input param-input" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="text" value="${escapeHtml(val)}" placeholder="Enter finding...">`;
                     }
 
                     let vizHtml = '';
@@ -1505,24 +1511,23 @@
                     }
 
                     return `
-                      <tr style="border-bottom:1px solid rgba(0,0,0,0.04)">
-                        <td style="padding:12px 6px">
-                          <strong style="color:var(--color-ink)">${escapeHtml(p.parameter_name)}</strong>
-                          ${p.unit ? `<span style="font-size:11px;color:var(--color-ink-muted);margin-left:4px">(${escapeHtml(p.unit)})</span>` : ''}
+                      <tr class="data-entry-row">
+                        <td class="param-td-name">
+                          <strong>${escapeHtml(p.parameter_name)}</strong>
+                          ${p.unit ? `<span class="param-unit" style="font-size:11px;color:var(--color-ink-muted);margin-left:4px">(${escapeHtml(p.unit)})</span>` : ''}
                         </td>
-                        <td style="padding:12px 6px;color:var(--color-ink-muted);font-size:12px">
-                          ${p.reference_text ? escapeHtml(p.reference_text) : (p.reference_low !== null && p.reference_high !== null ? `${p.reference_low} - ${p.reference_high} ${p.unit || ''}` : '—')}
+                        <td class="param-td-range">
+                          <span class="param-mobile-range-label">Ref: </span>
+                          <span class="param-range-val">${p.reference_text ? escapeHtml(p.reference_text) : (p.reference_low !== null && p.reference_high !== null ? `${p.reference_low} - ${p.reference_high} ${p.unit || ''}` : '—')}</span>
                         </td>
-                        <td style="padding:12px 6px">
+                        <td class="param-td-result">
                           ${inputHtml}
                         </td>
-                        <td style="padding:12px 6px">
-                          ${vizHtml}
-                        </td>
-                        <td style="padding:12px 6px;text-align:center">
-                          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;padding:4px 8px;border-radius:var(--radius-pill);background:${isAbn ? 'rgba(192,57,43,0.12)' : 'transparent'};transition:background 0.2s" class="flag-label-${p.id}">
+                        <td class="param-td-viz ${vizHtml ? '' : 'no-viz'}">${vizHtml}</td>
+                        <td class="param-td-flag" style="text-align:center">
+                          <label class="flag-label-${p.id} param-flag-pill ${isAbn ? 'is-abnormal' : ''}">
                             <input type="checkbox" class="param-abnormal-chk" data-param-id="${p.id}" ${isAbn ? 'checked' : ''} style="cursor:pointer">
-                            <span style="font-size:11px;font-weight:700;color:${isAbn ? '#C0392B' : 'var(--color-ink-faint)'}" class="flag-text-${p.id}">${isAbn ? 'ABNORMAL' : 'Normal'}</span>
+                            <span class="flag-text-${p.id} param-flag-text">${isAbn ? 'ABNORMAL' : 'Normal'}</span>
                           </label>
                         </td>
                       </tr>

@@ -19,6 +19,7 @@ from backend.app.core.security import (
 from backend.app.core.redis_client import get_redis
 from backend.app.repositories import user_repo, session_repo
 from backend.app.models.otp_request import OtpRequest, OtpPurposeEnum
+from backend.app.models.user import User
 from backend.app.services import audit_service, notification_service
 
 logger = logging.getLogger(__name__)
@@ -35,39 +36,212 @@ _otp_fail_counts: dict = {}
 _consumed_reset_tokens: dict[str, float] = {}     # token_identifier -> expire_timestamp
 
 
+class ServiceUnavailableError(Exception):
+    """Raised when shared security storage (e.g. Redis) is unavailable in production."""
+    pass
+
+
+# Redis Lua scripts for atomic ownership-verified mutations
+RELEASE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+"""
+
+FINALIZE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    redis.call('set', KEYS[1], 'consumed', 'EX', ARGV[2])
+    return 1
+else
+    return 0
+end
+"""
+
+
+def _acquire_reset_token_reservation(token_identifier: str, duration_seconds: int = 600, owner_id: Optional[str] = None) -> Optional[str]:
+    """
+    Atomically acquire a single-use reservation for a password-reset token.
+    Associates the reservation with a unique, unpredictable owner identifier.
+    Uses Redis atomic SET NX EX across workers.
+    In production, fails closed if Redis is unavailable or times out.
+    In development/test mode, falls back to thread-safe local store.
+    Returns the owner identifier on success, or None if already reserved or consumed.
+    """
+    from backend.app.config import settings
+    if not owner_id:
+        owner_id = str(uuid.uuid4())
+
+    r = get_redis()
+    key = f"used_reset_token:{token_identifier}"
+    if r:
+        try:
+            # SET with nx=True and ex=duration_seconds is atomic in Redis
+            # Exactly one concurrent caller receives True; all others receive None/False
+            acquired = r.set(key, owner_id, nx=True, ex=duration_seconds)
+            if acquired:
+                return owner_id
+            return None
+        except Exception as e:
+            logger.warning(f"Redis error during reset token acquisition: {e}")
+            if getattr(settings, "is_production", False) or settings.ENVIRONMENT.lower() == "production":
+                raise ServiceUnavailableError("Authentication service temporarily unavailable")
+
+    # In production without Redis: fail closed!
+    if getattr(settings, "is_production", False) or settings.ENVIRONMENT.lower() == "production":
+        logger.error("Production requires shared storage for password-reset token replay protection, but Redis is unavailable.")
+        raise ServiceUnavailableError("Authentication service temporarily unavailable")
+
+    # Development / Testing in-memory fallback (isolated from production)
+    now = time.time()
+    with _auth_lock:
+        stored = _consumed_reset_tokens.get(token_identifier)
+        if stored is not None:
+            if isinstance(stored, tuple) and len(stored) == 2:
+                exp, _ = stored
+            else:
+                exp = stored
+            if now < exp:
+                return None
+            else:
+                _consumed_reset_tokens.pop(token_identifier, None)
+        _consumed_reset_tokens[token_identifier] = (now + float(duration_seconds), owner_id)
+        return owner_id
+
+
+def _release_reset_token_reservation(token_identifier: str, owner_id: Optional[str] = None) -> bool:
+    """
+    Atomically release reset token reservation only if caller still holds ownership.
+    Prevents a stale worker whose reservation expired from releasing a reservation
+    re-acquired by another worker.
+    """
+    if not owner_id:
+        return False
+
+    r = get_redis()
+    key = f"used_reset_token:{token_identifier}"
+    released = False
+    if r:
+        try:
+            res = r.eval(RELEASE_LUA, 1, key, owner_id)
+            released = bool(res)
+        except Exception as e:
+            logger.warning(f"Redis error releasing reset token reservation: {e}")
+
+    now = time.time()
+    with _auth_lock:
+        stored = _consumed_reset_tokens.get(token_identifier)
+        if stored is not None:
+            if isinstance(stored, tuple) and len(stored) == 2:
+                stored_exp, stored_owner = stored
+                if stored_owner == owner_id:
+                    _consumed_reset_tokens.pop(token_identifier, None)
+                    released = True
+            elif stored == owner_id:
+                _consumed_reset_tokens.pop(token_identifier, None)
+                released = True
+    return released
+
+
+def _finalize_reset_token_consumption(token_identifier: str, owner_id: Optional[str] = None, duration_seconds: int = 600) -> bool:
+    """
+    Atomically finalize consumption in Redis only if caller still holds ownership.
+    If the reservation expired and was acquired by another owner, finalization fails
+    and does not overwrite the newer reservation.
+    """
+    r = get_redis()
+    key = f"used_reset_token:{token_identifier}"
+    finalized = False
+    if r:
+        try:
+            if owner_id:
+                res = r.eval(FINALIZE_LUA, 1, key, owner_id, str(duration_seconds))
+                finalized = bool(res)
+            else:
+                r.set(key, "consumed", ex=duration_seconds)
+                finalized = True
+        except Exception as e:
+            logger.warning(f"Redis error finalizing reset token consumption: {e}")
+
+    now = time.time()
+    with _auth_lock:
+        stored = _consumed_reset_tokens.get(token_identifier)
+        if stored is not None:
+            if isinstance(stored, tuple) and len(stored) == 2:
+                stored_exp, stored_owner = stored
+                if owner_id is None or stored_owner == owner_id:
+                    _consumed_reset_tokens[token_identifier] = (now + float(duration_seconds), "consumed")
+                    finalized = True
+            else:
+                _consumed_reset_tokens[token_identifier] = (now + float(duration_seconds), "consumed")
+                finalized = True
+        elif owner_id is None:
+            _consumed_reset_tokens[token_identifier] = (now + float(duration_seconds), "consumed")
+            finalized = True
+    return finalized
+
+
+def _is_reservation_held_by(token_identifier: str, owner_id: str) -> bool:
+    """
+    Verify whether the reservation is actively held by owner_id in Redis/memory.
+    Used before committing to ensure the reservation has not expired.
+    """
+    if not owner_id:
+        return False
+
+    r = get_redis()
+    key = f"used_reset_token:{token_identifier}"
+    if r:
+        try:
+            val = r.get(key)
+            return val == owner_id
+        except Exception as e:
+            logger.warning(f"Redis error checking reservation ownership: {e}")
+            from backend.app.config import settings
+            if getattr(settings, "is_production", False) or settings.ENVIRONMENT.lower() == "production":
+                raise ServiceUnavailableError("Authentication service temporarily unavailable")
+
+    now = time.time()
+    with _auth_lock:
+        stored = _consumed_reset_tokens.get(token_identifier)
+        if stored is not None:
+            if isinstance(stored, tuple) and len(stored) == 2:
+                stored_exp, stored_owner = stored
+                if now < stored_exp and stored_owner == owner_id:
+                    return True
+            elif stored == owner_id:
+                return True
+    return False
+
+
 def _is_reset_token_consumed(token_identifier: str) -> bool:
     r = get_redis()
     key = f"used_reset_token:{token_identifier}"
     if r:
         try:
             return r.get(key) is not None
-        except Exception as e:
-            logger.warning(f"Redis check used reset token error: {e}")
+        except Exception:
+            pass
 
     now = time.time()
     with _auth_lock:
-        exp = _consumed_reset_tokens.get(token_identifier)
-        if exp is not None:
-            if now < exp:
-                return True
-            else:
+        stored = _consumed_reset_tokens.get(token_identifier)
+        if stored is not None:
+            if isinstance(stored, tuple) and len(stored) == 2:
+                stored_exp, _ = stored
+                if now < stored_exp:
+                    return True
+                _consumed_reset_tokens.pop(token_identifier, None)
+            elif isinstance(stored, (int, float)):
+                if now < stored:
+                    return True
                 _consumed_reset_tokens.pop(token_identifier, None)
     return False
 
 
 def _mark_reset_token_consumed(token_identifier: str, duration_seconds: int = 600):
-    r = get_redis()
-    key = f"used_reset_token:{token_identifier}"
-    if r:
-        try:
-            r.set(key, "1", ex=duration_seconds)
-            return
-        except Exception as e:
-            logger.warning(f"Redis set used reset token error: {e}")
-
-    now = time.time()
-    with _auth_lock:
-        _consumed_reset_tokens[token_identifier] = now + float(duration_seconds)
+    _finalize_reset_token_consumption(token_identifier, owner_id=None, duration_seconds=duration_seconds)
 
 
 
@@ -435,40 +609,76 @@ def reset_password(db: Session, reset_token: str, new_password: str) -> bool:
     except Exception:
         raise ValueError("Invalid or expired reset token")
 
-    # Replay protection: check if reset token was already consumed
     jti = payload.get("jti")
     token_identifier = jti or hash_token(reset_token)
-    if _is_reset_token_consumed(token_identifier):
-        raise ValueError("Reset token has already been used")
 
-    if not validate_password_policy(new_password):
-        raise ValueError("Password must be between 6 and 12 characters with at least one letter and one digit")
-
-    user = user_repo.get_by_id(db, uuid.UUID(user_id))
-    if not user:
-        raise ValueError("User not found")
-
-    new_hash = hash_password(new_password)
-    user_repo.update_user(db, user.id,
-                          password_hash=new_hash,
-                          must_reset_password=False,
-                          is_active=True)
-
-    # Revoke all existing sessions for security
-    session_repo.revoke_all_user_sessions(db, user.id)
-
-    # Mark reset token as consumed for its remaining lifetime
     exp_claim = payload.get("exp")
     if exp_claim:
         now_ts = datetime.now(timezone.utc).timestamp()
         duration = max(60, int(exp_claim - now_ts))
     else:
         duration = 600
-    _mark_reset_token_consumed(token_identifier, duration)
 
-    audit_service.log(db, "auth.password_reset", actor_user_id=user.id,
-                      entity_type="user", entity_id=user.id)
-    db.commit()
+    # 1. Atomically reserve reset token across workers with unique ownership
+    owner_id = _acquire_reset_token_reservation(token_identifier, duration)
+    if not owner_id:
+        raise ValueError("Reset token has already been used")
+
+    # 2. Database update wrapped in atomic transaction with row locking and replay defense
+    try:
+        if not validate_password_policy(new_password):
+            raise ValueError("Password must be between 6 and 12 characters with at least one letter and one digit")
+
+        uid_obj = uuid.UUID(user_id)
+
+        # Database row-level lock serializes concurrent reset requests for the same user
+        user = db.query(User).filter(User.id == uid_obj).with_for_update().first()
+        if not user:
+            raise ValueError("User not found")
+
+        # Check DB-level consumption marker (guarantees resiliency against Redis finalization failure)
+        consumed_in_db = db.query(OtpRequest).filter(
+            OtpRequest.otp_hash == f"reset_token:{token_identifier}",
+            OtpRequest.purpose == OtpPurposeEnum.password_reset,
+            OtpRequest.used_at.isnot(None)
+        ).first()
+        if consumed_in_db:
+            raise ValueError("Reset token has already been used")
+
+        # Expiration safety check: verify worker still owns active reservation before committing
+        if not _is_reservation_held_by(token_identifier, owner_id):
+            raise ValueError("Password reset reservation expired or ownership lost; please retry")
+
+        new_hash = hash_password(new_password)
+        user_repo.update_user(db, user.id,
+                              password_hash=new_hash,
+                              must_reset_password=False,
+                              is_active=True)
+
+        # Atomically record token consumption marker in PostgreSQL transaction
+        db_marker = OtpRequest(
+            email=user.email,
+            otp_hash=f"reset_token:{token_identifier}",
+            purpose=OtpPurposeEnum.password_reset,
+            expires_at=datetime.fromtimestamp(exp_claim, tz=timezone.utc) if exp_claim else (datetime.now(timezone.utc) + timedelta(minutes=15)),
+            used_at=datetime.now(timezone.utc)
+        )
+        db.add(db_marker)
+
+        # Revoke all existing sessions for security
+        session_repo.revoke_all_user_sessions(db, user.id)
+
+        audit_service.log(db, "auth.password_reset", actor_user_id=user.id,
+                          entity_type="user", entity_id=user.id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Atomic ownership-verified release: stale worker will never release another worker's reservation
+        _release_reset_token_reservation(token_identifier, owner_id)
+        raise
+
+    # 3. Finalize consumption in shared store with atomic ownership check
+    _finalize_reset_token_consumption(token_identifier, owner_id, duration)
     return True
 
 
@@ -477,27 +687,43 @@ def refresh_access_token(db: Session, refresh_token: str) -> Optional[str]:
         payload = decode_token(refresh_token)
         if payload.get("type") != "refresh":
             return None
-        user_id = payload["sub"]
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+    except Exception:
+        return None
+
+    try:
+        uid_obj = uuid.UUID(user_id)
     except Exception:
         return None
 
     token_hash = hash_token(refresh_token)
     session = session_repo.get_session_by_token_hash(db, token_hash)
     if not session or session.revoked_at:
-        # Check if the token was previously revoked (reuse detection / possible breach)
+        # Check if this exact token was previously revoked for this user (confirmed reuse)
         from backend.app.models.active_session import ActiveSession
         revoked_sess = db.query(ActiveSession).filter(
             ActiveSession.refresh_token_hash == token_hash,
-            ActiveSession.revoked_at.isnot(None)
+            ActiveSession.revoked_at.isnot(None),
+            ActiveSession.user_id == uid_obj
         ).first()
         if revoked_sess:
+            # Minimal security log: no raw tokens, passwords, or PII
             logger.warning(
-                f"Security alert: attempt to use revoked refresh token for user {user_id}, "
-                f"session {revoked_sess.id}"
+                f"Security event [revoked_token_reuse]: session_id={revoked_sess.id}, "
+                f"user_id={revoked_sess.user_id}, event=token_reuse_detected"
             )
+            # Revoke all active sessions for this user to mitigate compromise
+            session_repo.revoke_all_user_sessions(db, revoked_sess.user_id)
+            db.commit()
         return None
 
-    user = user_repo.get_by_id(db, uuid.UUID(user_id))
+    # Verify session user ownership
+    if session.user_id != uid_obj:
+        return None
+
+    user = user_repo.get_by_id(db, uid_obj)
     if not user or not user.is_active:
         return None
 

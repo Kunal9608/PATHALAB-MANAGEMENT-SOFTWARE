@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+
+  <title>Failed Cached Registrations — Akriti Diagnostics Center</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+  <meta name="description" content="View and recover your failed offline and cached patient registrations.">
+
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/skeleton.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script src="/assets/js/theme.js"></script>
+  <style>
+    .failed-header-banner {
+      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+      border-radius: var(--radius-lg);
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: var(--shadow-sm);
+    }
+    .failed-header-banner h2 {
+      font-size: var(--text-2xl, 1.5rem);
+      font-weight: 700;
+      font-family: var(--font-display);
+      margin: 0 0 6px;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .failed-header-banner p {
+      font-size: var(--text-sm);
+      opacity: 0.85;
+      margin: 0;
+      color: #e2e8f0;
+      max-width: 650px;
+      line-height: 1.5;
+    }
+    .isolation-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: rgba(225, 29, 72, 0.2);
+      border: 1px solid rgba(225, 29, 72, 0.35);
+      color: #fda4af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .filters-bar-pro {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      background: var(--color-surface); border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg); padding: 12px 16px;
+      margin-bottom: 20px;
+    }
+    .temp-ref-badge {
+      font-family: var(--font-mono, monospace);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 8px;
+      background: var(--accent-tint, #f1f5f9);
+      color: var(--accent, #0a192f);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      letter-spacing: 0.03em;
+      user-select: all;
+    }
+    [data-theme="dark"] .temp-ref-badge {
+      background: rgba(255,255,255,0.06);
+      color: #93c5fd;
+      border-color: rgba(255,255,255,0.12);
+    }
+    .reason-box {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--color-error, #dc2626);
+      background: rgba(220, 38, 38, 0.08);
+      border-left: 3px solid var(--color-error, #dc2626);
+      padding: 6px 10px;
+      border-radius: 0 4px 4px 0;
+      max-width: 320px;
+    }
+    [data-theme="dark"] .reason-box {
+      background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5;
+    }
+    .retry-counter {
+      font-size: 11px;
+      color: var(--color-ink-muted);
+      font-weight: 500;
+      margin-top: 4px;
+    }
+    .row-fade-out {
+      transition: all 0.4s ease;
+      background: rgba(16, 185, 129, 0.15) !important;
+      opacity: 0;
+      transform: scaleY(0);
+      transform-origin: top;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <nav class="sidebar" id="sidebar"></nav>
+
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger" id="hamburger-btn" aria-label="Open menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <h1 class="page-heading" id="topbar-title">Failed Cached Patients</h1>
+      </div>
+    </header>
+
+    <div class="offline-banner" role="status"></div>
+
+    <main class="page-content">
+      <!-- Header Banner -->
+      <div class="failed-header-banner">
+        <div>
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Failed Cached Registrations
+          </h2>
+          <p>
+            Review and recover patient registrations that failed synchronization. Every record is strictly isolated to your account — no other Admin or Staff user can view or retry your cached patients.
+          </p>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <span class="isolation-pill">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            User Isolated
+          </span>
+          <button class="btn btn-sm btn-secondary" id="refresh-btn" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters Bar -->
+      <div class="filters-bar-pro">
+        <div class="topbar-search" style="flex:1; min-width:240px; max-width:380px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" placeholder="Search by patient name, mobile, or Temp Ref ID…" autocomplete="off">
+        </div>
+        <div id="stats-badge" style="font-size:13px;font-weight:600;color:var(--color-ink-muted)"></div>
+      </div>
+
+      <!-- Content Container -->
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div id="table-container" class="table-wrap">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/assets/js/api-client.js"></script>
+<script src="/assets/js/toast.js"></script>
+<script src="/assets/js/shell.js"></script>
+<script>
+  let failedRecords = [];
+  let isLoading = false;
+  let searchDebounce = null;
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    Shell.init({ role: 'admin', activeHref: '/admin/failed-patients' });
+
+    document.getElementById('refresh-btn')?.addEventListener('click', loadFailedPatients);
+    document.getElementById('search-input')?.addEventListener('input', (e) => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        renderTable(e.target.value);
+      }, 300);
+    });
+
+    await loadFailedPatients();
+  });
+
+  async function loadFailedPatients() {
+    if (isLoading) return;
+    isLoading = true;
+    renderLoading();
+
+    try {
+      const res = await API.get('/api/v1/offline-patients/failed?page_size=100');
+      failedRecords = res.items || [];
+      renderTable(document.getElementById('search-input')?.value || '');
+    } catch (err) {
+      renderError(err.message || 'Failed to load failed registrations.');
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function renderLoading() {
+    const container = document.getElementById('table-container');
+    container.innerHTML = `
+      <div style="padding: 40px 24px; text-align: center;">
+        <div class="skeleton-shimmer" style="height:38px;margin-bottom:12px;border-radius:6px"></div>
+        <div class="skeleton-shimmer" style="height:52px;margin-bottom:8px;border-radius:6px"></div>
+        <div class="skeleton-shimmer" style="height:52px;margin-bottom:8px;border-radius:6px"></div>
+        <div class="skeleton-shimmer" style="height:52px;border-radius:6px"></div>
+      </div>
+    `;
+  }
+
+  function renderError(message) {
+    const container = document.getElementById('table-container');
+    container.innerHTML = `
+      <div style="padding: 48px 24px; text-align: center;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="1.8" style="margin-bottom:12px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <h3 style="font-size:16px;font-weight:700;color:var(--color-ink);margin-bottom:6px">Unable to Load Records</h3>
+        <p style="font-size:13px;color:var(--color-ink-muted);margin-bottom:16px">${escapeHtml(message)}</p>
+        <button class="btn btn-sm btn-primary" onclick="loadFailedPatients()">Try Again</button>
+      </div>
+    `;
+  }
+
+  function renderTable(filterQuery = '') {
+    const container = document.getElementById('table-container');
+    const statsBadge = document.getElementById('stats-badge');
+
+    const q = (filterQuery || '').trim().toLowerCase();
+    const filtered = failedRecords.filter(r => {
+      if (!q) return true;
+      const name = (r.patient_name || '').toLowerCase();
+      const mobile = (r.mobile || '').toLowerCase();
+      const ref = (r.temp_ref_id || '').toLowerCase();
+      return name.includes(q) || mobile.includes(q) || ref.includes(q);
+    });
+
+    if (statsBadge) {
+      statsBadge.textContent = `${filtered.length} failed record${filtered.length === 1 ? '' : 's'}`;
+    }
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 64px 24px; text-align: center;">
+          <div style="width:56px;height:56px;border-radius:50%;background:rgba(5, 150, 105, 0.1);color:#059669;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h3 style="font-size:17px;font-weight:700;color:var(--color-ink);margin-bottom:6px">
+            ${q ? 'No Matching Records' : 'No Failed Registrations'}
+          </h3>
+          <p style="font-size:13px;color:var(--color-ink-muted);max-width:420px;margin:0 auto">
+            ${q ? `No records match "<strong>${escapeHtml(q)}</strong>".` : 'All your offline and cached patient registrations have synchronized successfully.'}
+          </p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <table class="table" style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:1px solid var(--color-border);background:var(--surface-table-header)">
+            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Temp Ref ID</th>
+            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Patient</th>
+            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Created</th>
+            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Failure Reason</th>
+            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Last Attempt</th>
+            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted);text-align:right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map(r => `
+            <tr id="row-${r.id}" style="border-bottom:1px solid var(--color-border);transition:background 0.15s">
+              <td style="padding:14px 16px;vertical-align:top">
+                <span class="temp-ref-badge">${escapeHtml(r.temp_ref_id)}</span>
+                ${r.permanent_patient_code ? `<div style="margin-top:4px"><span class="badge badge-success" style="font-size:10px">ID: ${escapeHtml(r.permanent_patient_code)}</span></div>` : ''}
+              </td>
+              <td style="padding:14px 16px;vertical-align:top">
+                <div style="font-weight:700;color:var(--color-ink);font-size:13px">${escapeHtml(r.patient_name)}</div>
+                <div style="font-size:12px;color:var(--color-ink-muted);margin-top:2px">
+                  ${escapeHtml(r.mobile || 'No Mobile')}
+                  ${r.age ? ` · Age ${r.age}` : ''}
+                  ${r.gender ? ` · ${escapeHtml(r.gender)}` : ''}
+                </div>
+              </td>
+              <td style="padding:14px 16px;vertical-align:top;font-size:12px;color:var(--color-ink);white-space:nowrap">
+                ${formatDateTime(r.created_at)}
+              </td>
+              <td style="padding:14px 16px;vertical-align:top">
+                <div class="reason-box" id="reason-${r.id}">
+                  ${escapeHtml(r.failure_reason || 'Unknown synchronization error')}
+                </div>
+                <div class="retry-counter" id="retries-${r.id}">
+                  Attempted: ${r.retry_count || 0} time${(r.retry_count === 1) ? '' : 's'}
+                </div>
+              </td>
+              <td style="padding:14px 16px;vertical-align:top;font-size:12px;color:var(--color-ink-muted);white-space:nowrap">
+                ${r.last_attempt_at ? formatDateTime(r.last_attempt_at) : '—'}
+              </td>
+              <td style="padding:14px 16px;vertical-align:top;text-align:right;white-space:nowrap">
+                <button
+                  class="btn btn-sm btn-primary retry-btn"
+                  id="btn-retry-${r.id}"
+                  onclick="retryPatient('${r.id}', '${escapeHtml(r.temp_ref_id)}')"
+                  style="min-width:105px"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  Retry Sync
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function retryPatient(recordId, tempRefId) {
+    const btn = document.getElementById(`btn-retry-${recordId}`);
+    if (!btn || btn.disabled) return;
+
+    btn.disabled = true;
+    btn.innerHTML = `<span class="btn-loading-spinner"></span> Retrying...`;
+
+    try {
+      const res = await API.post(`/api/v1/offline-patients/${recordId}/retry`);
+      if (res.status === 'SUCCESS') {
+        Toast.show(`Patient synchronized successfully! Code: ${res.patient_code}`, 'success', 5000);
+
+        // Animate row removal
+        const row = document.getElementById(`row-${recordId}`);
+        if (row) {
+          row.classList.add('row-fade-out');
+          setTimeout(() => {
+            failedRecords = failedRecords.filter(r => r.id !== recordId && r.temp_ref_id !== tempRefId);
+            renderTable(document.getElementById('search-input')?.value || '');
+          }, 400);
+        }
+      } else {
+        const failureReason = res.failure_reason || 'Retry failed. Please check details.';
+        Toast.show(`Sync failed: ${failureReason}`, 'error', 6000);
+
+        // Update row failure reason & retry counter
+        const reasonBox = document.getElementById(`reason-${recordId}`);
+        if (reasonBox) reasonBox.textContent = failureReason;
+        const retryCounter = document.getElementById(`retries-${recordId}`);
+        if (retryCounter && res.retry_count) {
+          retryCounter.textContent = `Attempted: ${res.retry_count} times`;
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Retry Sync`;
+      }
+    } catch (err) {
+      const msg = err.message || 'Retry request failed.';
+      Toast.show(msg, 'error', 6000);
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Retry Sync`;
+    }
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>'"]/g, tag => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag] || tag));
+  }
+</script>
+</body>
+</html>

@@ -32,16 +32,43 @@ const OfflineQueue = (() => {
     });
   }
 
-  async function enqueue(endpoint, method, payload, idempotencyKey) {
+  function generateTempRefId() {
+    const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `TMP-${d}-${rand}`;
+  }
+
+  async function enqueue(endpoint, method, payload, idempotencyKey, tempRefId = null) {
     const d = await openDB();
+    const refId = tempRefId || generateTempRefId();
+    payload.temp_ref_id = refId;
+
     return new Promise((resolve, reject) => {
       const tx = d.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).add({
-        endpoint, method, payload, idempotencyKey,
+        endpoint,
+        method,
+        payload,
+        idempotencyKey,
+        tempRefId: refId,
+        status: 'PENDING',
+        retryCount: 0,
+        lastAttempt: null,
+        failureReason: null,
         timestamp: Date.now(),
       });
-      tx.oncomplete = resolve;
+      tx.oncomplete = () => resolve(refId);
       tx.onerror    = e => reject(e.target.error);
+    });
+  }
+
+  async function updateItem(item) {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(item);
+      tx.oncomplete = resolve;
+      tx.onerror = e => reject(e.target.error);
     });
   }
 
@@ -168,18 +195,34 @@ const OfflineQueue = (() => {
       broadcastState('syncing', items.length - i, progressMsg);
 
       try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': item.idempotencyKey,
+        };
+        if (item.tempRefId) {
+          headers['X-Temp-Ref-ID'] = item.tempRefId;
+        }
+
         const res = await fetch(item.endpoint, {
           method: item.method,
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Idempotency-Key': item.idempotencyKey,
-          },
+          headers,
           body: JSON.stringify(item.payload),
         });
+
         if (res.ok) {
-          await remove(item.id);
-          synced++;
+          const resData = await res.json().catch(() => ({}));
+          if (resData && resData.status === 'FAILED') {
+            item.status = 'FAILED';
+            item.failureReason = resData.failure_reason || 'Synchronization rejected';
+            item.retryCount = (item.retryCount || 0) + 1;
+            item.lastAttempt = Date.now();
+            await updateItem(item);
+            failed++;
+          } else {
+            await remove(item.id);
+            synced++;
+          }
         } else if (res.status === 409) {
           const errData = await res.json().catch(() => ({}));
           const existingPatient = (errData.detail && typeof errData.detail === 'object') ? errData.detail.existing_patient : null;
@@ -201,12 +244,28 @@ const OfflineQueue = (() => {
             }
             return; // Exit flush loop to wait for resolution
           } else {
+            item.status = 'FAILED';
+            item.failureReason = 'Duplicate patient detected';
+            item.retryCount = (item.retryCount || 0) + 1;
+            item.lastAttempt = Date.now();
+            await updateItem(item);
             failed++;
           }
         } else {
+          const errData = await res.json().catch(() => ({}));
+          item.status = 'FAILED';
+          item.failureReason = (typeof errData.detail === 'string' ? errData.detail : (errData.detail?.message || 'Server rejected registration'));
+          item.retryCount = (item.retryCount || 0) + 1;
+          item.lastAttempt = Date.now();
+          await updateItem(item);
           failed++;
         }
-      } catch {
+      } catch (networkErr) {
+        item.status = 'FAILED';
+        item.failureReason = 'Network or backend unavailable';
+        item.retryCount = (item.retryCount || 0) + 1;
+        item.lastAttempt = Date.now();
+        await updateItem(item).catch(() => {});
         failed++;
       }
     }

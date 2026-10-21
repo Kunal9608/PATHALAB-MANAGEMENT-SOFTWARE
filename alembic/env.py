@@ -26,7 +26,7 @@ from backend.app.models import (
     user, face_embedding, attendance_event, patient, patient_test,
     test, test_price_history, doctor, franchise, report, expense,
     login_history, active_session, audit_log, otp_request,
-    test_parameter, patient_test_result
+    test_parameter, patient_test_result, cached_patient_registration
 )
 
 # Overwrite the alembic.ini URL with the one from our environment settings

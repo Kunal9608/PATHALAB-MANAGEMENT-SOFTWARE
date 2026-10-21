@@ -936,6 +936,368 @@
   }
 
   /* ╔══════════════════════════════════════════════════════╗
+     ║  STRUCTURED DATA ENTRY & PARAMETER CARDS             ║
+     ╚══════════════════════════════════════════════════════╝ */
+  #data-entry-modal .modal.modal-lg {
+    max-width: 820px;
+    width: 95%;
+  }
+
+  .test-param-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    margin-bottom: 16px;
+  }
+
+  .test-param-card-header {
+    background: linear-gradient(135deg, var(--color-primary-tint) 0%, var(--color-bg) 100%);
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .test-param-title-wrap {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .test-param-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    color: var(--color-ink);
+  }
+
+  .test-param-code {
+    font-size: 11px;
+    color: var(--color-ink-muted);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+
+  .test-param-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .test-param-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .test-param-field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-ink-muted);
+    white-space: nowrap;
+  }
+
+  .test-param-field .test-note-input {
+    height: 32px;
+    font-size: 12px;
+    width: 180px;
+  }
+
+  .test-param-field .test-attachment-file {
+    height: 32px;
+    font-size: 11px;
+    padding: 3px;
+    width: 180px;
+  }
+
+  .test-param-table-wrapper {
+    padding: 16px 18px;
+    width: 100%;
+  }
+
+  .data-entry-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .data-entry-table thead tr {
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-ink-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .data-entry-table thead th {
+    padding: 8px 6px;
+  }
+
+  .data-entry-row {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  }
+
+  .data-entry-row td {
+    padding: 12px 6px;
+  }
+
+  .param-mobile-range-label {
+    display: none;
+  }
+
+  .data-entry-table .param-input {
+    width: 100%;
+    height: 34px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .param-flag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 8px;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    transition: background 0.2s;
+  }
+
+  .param-flag-pill.is-abnormal {
+    background: rgba(192, 57, 43, 0.12);
+  }
+
+  .param-flag-text {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-ink-faint);
+  }
+
+  .param-flag-pill.is-abnormal .param-flag-text {
+    color: #C0392B;
+  }
+
+  /* ── Responsive Mobile Overrides for Data Entry Modal (<= 768px) ────────── */
+  @media (max-width: 768px) {
+    #data-entry-modal.modal-backdrop,
+    #partial-alert-modal.modal-backdrop {
+      padding: 6px !important;
+    }
+
+    #data-entry-modal .modal,
+    #partial-alert-modal .modal {
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 94vh !important;
+      margin: 0 !important;
+      border-radius: 14px !important;
+    }
+
+    #data-entry-modal .modal-header,
+    #partial-alert-modal .modal-header {
+      padding: 12px 14px !important;
+    }
+
+    #data-entry-modal .modal-title {
+      font-size: 16px !important;
+      line-height: 1.25 !important;
+    }
+
+    #data-entry-modal .modal-body {
+      padding: 10px 8px !important;
+      max-height: calc(94vh - 140px) !important;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #data-entry-patient-info {
+      padding: 10px 12px !important;
+      margin-bottom: 12px !important;
+      flex-wrap: wrap !important;
+      gap: 8px !important;
+    }
+
+    .test-param-card {
+      border-radius: 12px !important;
+      margin-bottom: 12px !important;
+    }
+
+    .test-param-card-header {
+      padding: 12px !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 10px !important;
+    }
+
+    .test-param-header-actions {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 8px !important;
+      width: 100% !important;
+    }
+
+    .test-param-field {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 4px !important;
+      width: 100% !important;
+    }
+
+    .test-param-field-label {
+      font-size: 11px !important;
+    }
+
+    .test-param-field .test-note-input {
+      width: 100% !important;
+      height: 36px !important;
+      font-size: 13px !important;
+    }
+
+    .test-param-field .test-attachment-file {
+      width: 100% !important;
+      height: 36px !important;
+      font-size: 12px !important;
+    }
+
+    .test-param-table-wrapper {
+      padding: 10px 8px !important;
+    }
+
+    .data-entry-table {
+      display: block !important;
+      width: 100% !important;
+    }
+
+    .data-entry-table thead {
+      display: none !important;
+    }
+
+    .data-entry-table tbody {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+      width: 100% !important;
+    }
+
+    .data-entry-row {
+      display: grid !important;
+      grid-template-columns: 1fr auto !important;
+      grid-template-areas:
+        "name   name"
+        "range  range"
+        "result flag"
+        "viz    viz" !important;
+      gap: 6px 10px !important;
+      background: var(--color-bg) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: 10px !important;
+      padding: 10px 12px !important;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+      align-items: center !important;
+    }
+
+    .data-entry-row td {
+      padding: 0 !important;
+      border: none !important;
+    }
+
+    .param-td-name {
+      grid-area: name !important;
+    }
+
+    .param-td-name strong {
+      font-size: 13.5px !important;
+      color: var(--color-ink) !important;
+    }
+
+    .param-td-range {
+      grid-area: range !important;
+      font-size: 11.5px !important;
+      color: var(--color-ink-muted) !important;
+      line-height: 1.35 !important;
+      padding-bottom: 2px !important;
+    }
+
+    .param-mobile-range-label {
+      display: inline !important;
+      font-weight: 600 !important;
+      color: var(--color-ink-faint) !important;
+      margin-right: 2px !important;
+    }
+
+    .param-td-result {
+      grid-area: result !important;
+      min-width: 0 !important;
+    }
+
+    .data-entry-table .param-input {
+      width: 100% !important;
+      height: 38px !important;
+      font-size: 14px !important;
+    }
+
+    .param-td-flag {
+      grid-area: flag !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-end !important;
+    }
+
+    .param-td-viz {
+      grid-area: viz !important;
+      width: 100% !important;
+      padding-top: 4px !important;
+    }
+
+    .param-td-viz.no-viz,
+    .param-td-viz:empty {
+      display: none !important;
+    }
+
+    .range-viz-container {
+      max-width: 100% !important;
+      width: 100% !important;
+    }
+
+    #data-entry-modal .modal-footer,
+    #partial-alert-modal .modal-footer {
+      padding: 12px 14px !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 10px !important;
+    }
+
+    #data-entry-modal .modal-footer > div:first-child {
+      font-size: 11px !important;
+      text-align: center !important;
+    }
+
+    #data-entry-modal .modal-footer > div:last-child,
+    #partial-alert-modal .modal-footer {
+      display: flex !important;
+      width: 100% !important;
+      gap: 8px !important;
+    }
+
+    #data-entry-modal .modal-footer .btn,
+    #partial-alert-modal .modal-footer .btn {
+      flex: 1 !important;
+      padding: 10px 12px !important;
+      font-size: 13px !important;
+      justify-content: center !important;
+    }
+  }
+
+  /* ╔══════════════════════════════════════════════════════╗
    ║  MISC UTILITIES                                      ║
    ╚══════════════════════════════════════════════════════╝ */
   .divider {

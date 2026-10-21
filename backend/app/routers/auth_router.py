@@ -59,13 +59,7 @@ def logout(
     from backend.app.repositories import session_repo as srepo
     import uuid
 
-    # 1. Revoke session associated with refresh token cookie if present
-    refresh = request.cookies.get("refresh_token")
-    if refresh:
-        token_hash = hash_token(refresh)
-        srepo.revoke_session_by_token_hash(db, token_hash)
-
-    # 2. Revoke session associated with access token (from Authorization header or cookie)
+    # 1. Revoke session associated with access token (from Authorization header or cookie)
     access_token = None
     if credentials and credentials.credentials:
         access_token = credentials.credentials
@@ -75,15 +69,39 @@ def logout(
     if access_token:
         try:
             payload = decode_token(access_token)
-            sid = payload.get("sid")
-            if sid:
-                srepo.revoke_session(db, uuid.UUID(sid))
+            # Strictly accept only valid access tokens for access-token based logout
+            if payload.get("type") == "access":
+                user_id_str = payload.get("sub")
+                sid_str = payload.get("sid")
+                if user_id_str and sid_str:
+                    user_id = uuid.UUID(user_id_str)
+                    sid = uuid.UUID(sid_str)
+                    # Verify session ownership: only revoke if session belongs to this user
+                    srepo.revoke_user_session(db, sid, user_id)
+        except Exception:
+            # Do not disclose token-validation internals to unauthenticated/invalid callers
+            pass
+
+    # 2. Revoke session associated with refresh token cookie if present
+    refresh = request.cookies.get("refresh_token")
+    if refresh:
+        try:
+            ref_payload = decode_token(refresh)
+            if ref_payload.get("type") == "refresh":
+                ref_user_id_str = ref_payload.get("sub")
+                if ref_user_id_str:
+                    ref_user_id = uuid.UUID(ref_user_id_str)
+                    token_hash = hash_token(refresh)
+                    srepo.revoke_session_by_token_hash(db, token_hash, user_id=ref_user_id)
         except Exception:
             pass
 
     db.commit()
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+
+    # Clear cookies with exact security attributes matching how they were set
+    secure = settings.cookie_secure
+    response.delete_cookie("access_token", path="/", httponly=True, secure=secure, samesite="strict")
+    response.delete_cookie("refresh_token", path="/", httponly=True, secure=secure, samesite="strict")
     return {"message": "Logged out successfully"}
 
 
@@ -151,6 +169,12 @@ def reset_password(payload: PasswordResetRequest, request: Request, response: Re
 
     try:
         auth_service.reset_password(db, payload.reset_token, payload.new_password)
+    except getattr(auth_service, "ServiceUnavailableError", Exception) as e:
+        if type(e).__name__ == "ServiceUnavailableError":
+            raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable")
+        if isinstance(e, ValueError):
+            raise HTTPException(status_code=400, detail=str(e))
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

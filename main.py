@@ -65,10 +65,13 @@ def check_database():
             separator = "&" if "?" in db_url else "?"
             db_url = f"{db_url}{separator}sslmode=require"
         engine = sa.create_engine(db_url, pool_pre_ping=True)
-        with engine.connect() as conn:
-            conn.execute(sa.text("SELECT 1"))
-        print("  [OK] Database connected")
-        return True
+        try:
+            with engine.connect() as conn:
+                conn.execute(sa.text("SELECT 1"))
+            print("  [OK] Database connected")
+            return True
+        finally:
+            engine.dispose()
     except Exception as e:
         print(f"  [WARN] Database not reachable: {e}")
         print("  -> Make sure PostgreSQL is running and DATABASE_URL is correct in .env")

@@ -159,22 +159,23 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
     due_amt = max(0.0, tot_amt - paid_amt)
     reg_date_str = patient.sample_date.strftime("%d %b %Y") if patient.sample_date else date.today().strftime("%d %b %Y")
 
-    background_tasks.add_task(
-        notification_service.notify,
-        "patient_registered",
-        patient.mobile,
-        {
-            "patient_name": patient.name,
-            "patient_code": patient_code,
-            "mobile": patient.mobile,
-            "age": patient.age,
-            "gender": patient.gender.value if hasattr(patient.gender, 'value') else str(patient.gender),
-            "total_amount": tot_amt,
-            "paid_amount": paid_amt,
-            "due_amount": due_amt,
-            "registered_date": reg_date_str,
-        }
-    )
+    if background_tasks:
+        background_tasks.add_task(
+            notification_service.notify,
+            "patient_registered",
+            patient.mobile,
+            {
+                "patient_name": patient.name,
+                "patient_code": patient_code,
+                "mobile": patient.mobile,
+                "age": patient.age,
+                "gender": patient.gender.value if hasattr(patient.gender, 'value') else str(patient.gender),
+                "total_amount": tot_amt,
+                "paid_amount": paid_amt,
+                "due_amount": due_amt,
+                "registered_date": reg_date_str,
+            }
+        )
 
     db.commit()
     try:

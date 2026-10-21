@@ -28,13 +28,31 @@ engine_kwargs = {
 }
 
 if not is_sqlite:
+    is_supabase_session_pooler = "pooler.supabase.com" in settings.DATABASE_URL and ":6543" not in settings.DATABASE_URL
+    if is_supabase_session_pooler:
+        # Supabase pooler on port 5432 enforces strict upstream limit of 15 clients per pool.
+        # Keeping local pool at 10+3=13 connections ensures requests queue in memory
+        # rather than being terminated by upstream FATAL EMAXCONNSESSION.
+        p_size = int(os.getenv("DB_POOL_SIZE", "10"))
+        p_overflow = int(os.getenv("DB_MAX_OVERFLOW", "3"))
+        p_timeout = int(os.getenv("DB_POOL_TIMEOUT", "60"))
+    else:
+        # Verified PostgreSQL max_connections is 60.
+        # Across 2 workers (or replicas), 10 base + 5 overflow = 15 max per worker (30 total),
+        # leaving 30 connections of headroom for Supabase internal services and superuser access.
+        p_size = int(os.getenv("DB_POOL_SIZE", "10"))
+        p_overflow = int(os.getenv("DB_MAX_OVERFLOW", "5"))
+        p_timeout = int(os.getenv("DB_POOL_TIMEOUT", "45"))
+
+    p_recycle = int(os.getenv("DB_POOL_RECYCLE", "300"))
+
     engine_kwargs.update({
-        "pool_size": 15,
-        "max_overflow": 20,
-        "pool_timeout": 30,
-        "pool_recycle": 300,  # Recycle every 5m to prevent stale sockets/leaks on Supabase
+        "pool_size": p_size,
+        "max_overflow": p_overflow,
+        "pool_timeout": p_timeout,
+        "pool_recycle": p_recycle,  # Recycle every 5m to prevent stale sockets/leaks on Supabase
         "pool_pre_ping": True,
-        "pool_use_lifo": True, # Reuse most recently used connections first to allow idle connections to be closed
+        "pool_use_lifo": True,  # Reuse most recently used connections first to allow idle overflow connections to close
         "connect_args": {
             "keepalives": 1,
             "keepalives_idle": 30,
@@ -72,6 +90,36 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
             )
 
 
+@event.listens_for(engine, "checkout")
+def receive_checkout(dbapi_connection, connection_record, connection_proxy):
+    connection_record.info["checkout_time"] = time.time()
+
+
+@event.listens_for(engine, "checkin")
+def receive_checkin(dbapi_connection, connection_record):
+    checkout_time = connection_record.info.pop("checkout_time", None)
+    if checkout_time:
+        duration = time.time() - checkout_time
+        if duration > 5.0:
+            logger.warning(
+                f"LONG CONNECTION HOLD [{duration:.3f}s]: Database connection was checked out for >5s"
+            )
+
+
+def get_pool_status() -> dict:
+    """Return runtime connection pool statistics for health & monitoring."""
+    if is_sqlite or not hasattr(engine, "pool"):
+        return {"status": "sqlite_or_no_pool"}
+    pool = engine.pool
+    return {
+        "pool_size": pool.size(),
+        "checkedin": pool.checkedin(),
+        "checkedout": pool.checkedout(),
+        "overflow": pool.overflow(),
+        "total_connections": pool.checkedin() + pool.checkedout(),
+    }
+
+
 def get_db():
     """FastAPI dependency — yields a DB session and ensures it's closed."""
     db = SessionLocal()
@@ -97,9 +145,16 @@ def init_db():
         user, face_embedding, attendance_event, patient, patient_test,
         test, test_price_history, doctor, franchise, report, expense,
         login_history, active_session, audit_log, otp_request,
-        test_parameter, patient_test_result
+        test_parameter, patient_test_result, cached_patient_registration
     )
     Base.metadata.create_all(bind=engine)
-
-    # Additional fallback migrations and indexes have been removed as per F-31.
-    # Schema changes should strictly be managed via Alembic migrations.
+    if not is_sqlite:
+        try:
+            from datetime import datetime, timezone
+            curr_yr = datetime.now(timezone.utc).year
+            with engine.connect() as conn:
+                conn.execute(text(f"CREATE SEQUENCE IF NOT EXISTS patient_seq_{curr_yr} START 1"))
+                conn.execute(text(f"CREATE SEQUENCE IF NOT EXISTS patient_seq_{curr_yr + 1} START 1"))
+                conn.commit()
+        except Exception as e:
+            logger.debug(f"Sequence pre-creation notice: {e}")

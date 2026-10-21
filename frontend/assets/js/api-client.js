@@ -94,14 +94,28 @@ const API = (() => {
       try {
         res = await fetch(path, init);
       } catch (err) {
-        const isOnline = navigator.onLine !== false;
-        const errorMsg = isOnline ? 'Server is unreachable' : 'No internet connection';
-        if (!options.silent) {
-          if (typeof window.Toast !== 'undefined') {
-            window.Toast.show(errorMsg, 'error');
-          }
+        let errorMsg = 'Network connection failed';
+        let category = 'NETWORK_ERROR';
+
+        if (err.name === 'AbortError') {
+          errorMsg = 'Request timed out or was aborted';
+          category = 'TIMEOUT';
+        } else if (navigator.onLine === false) {
+          errorMsg = 'No internet connection. Please check your network.';
+          category = 'OFFLINE';
+        } else {
+          errorMsg = 'Laboratory server is unreachable. Please check connection.';
+          category = 'SERVER_UNREACHABLE';
         }
-        throw new Error(errorMsg);
+
+        if (!options.silent && typeof window.Toast !== 'undefined') {
+          window.Toast.show(errorMsg, 'error');
+        }
+
+        const netErr = new Error(errorMsg);
+        netErr.category = category;
+        netErr.originalError = err;
+        throw netErr;
       }
 
       // 401 → try refresh once
@@ -153,8 +167,14 @@ const API = (() => {
         let errData = {};
         try { errData = await res.json(); } catch (_) {}
         
-        let msg = errData?.detail || errData?.message || `Request failed (${res.status})`;
-        if (typeof msg === 'object' && msg !== null) {
+        let msg = errData?.detail || errData?.message || errData?.error?.message;
+        if (!msg) {
+          if (res.status === 403) msg = 'Access denied: You do not have permission for this action.';
+          else if (res.status === 404) msg = 'The requested diagnostic resource was not found.';
+          else if (res.status === 429) msg = 'Too many requests. Please slow down and try again.';
+          else if (res.status >= 500) msg = 'Laboratory server error. Please try again shortly.';
+          else msg = `Request failed with status ${res.status}`;
+        } else if (typeof msg === 'object' && msg !== null) {
           if (Array.isArray(msg)) {
             msg = msg.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
           } else {
@@ -162,14 +182,14 @@ const API = (() => {
           }
         }
 
-        if (!options.silent) {
-          if (typeof window.Toast !== 'undefined') {
-            window.Toast.show(msg, 'error');
-          }
+        if (!options.silent && typeof window.Toast !== 'undefined') {
+          window.Toast.show(msg, 'error');
         }
+
         const err = new Error(msg);
         err.status = res.status;
         err.data = errData;
+        err.category = res.status >= 500 ? 'SERVER_ERROR' : (res.status === 404 ? 'NOT_FOUND' : 'CLIENT_ERROR');
         throw err;
       }
 

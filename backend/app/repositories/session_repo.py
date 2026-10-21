@@ -47,8 +47,29 @@ def revoke_session(db: Session, session_id: uuid.UUID) -> bool:
     return True
 
 
-def revoke_session_by_token_hash(db: Session, token_hash: str) -> bool:
-    session = db.query(ActiveSession).filter(ActiveSession.refresh_token_hash == token_hash).first()
+def revoke_user_session(db: Session, session_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    """Revoke a session only if it belongs to the specified user."""
+    session = db.query(ActiveSession).filter(
+        ActiveSession.id == session_id,
+        ActiveSession.user_id == user_id,
+        ActiveSession.revoked_at.is_(None)
+    ).first()
+    if not session:
+        return False
+    session.revoked_at = datetime.now(timezone.utc)
+    db.flush()
+    return True
+
+
+def revoke_session_by_token_hash(db: Session, token_hash: str, user_id: Optional[uuid.UUID] = None) -> bool:
+    """Revoke a session by token hash, optionally verifying user ownership."""
+    q = db.query(ActiveSession).filter(
+        ActiveSession.refresh_token_hash == token_hash,
+        ActiveSession.revoked_at.is_(None)
+    )
+    if user_id is not None:
+        q = q.filter(ActiveSession.user_id == user_id)
+    session = q.first()
     if not session:
         return False
     session.revoked_at = datetime.now(timezone.utc)

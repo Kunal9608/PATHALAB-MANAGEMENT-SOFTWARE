@@ -80,6 +80,9 @@ class Patient(Base):
         Index("idx_patients_mobile_date", "mobile", "sample_date"),
         Index("idx_patients_collected_by_created", "collected_by", "created_at"),
         Index("idx_patients_name_mobile_code", "name", "mobile", "patient_code"),
+        Index("idx_patients_created_active", "created_at", postgresql_where=text("deleted_at IS NULL")),
+        Index("idx_patients_code_active", "patient_code", postgresql_where=text("deleted_at IS NULL")),
+        Index("idx_patients_mobile_active", "mobile", postgresql_where=text("deleted_at IS NULL")),
     )
 
     @property

@@ -26,22 +26,16 @@ def upload_report(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from backend.app.repositories import patient_repo
-    patient = patient_repo.get_by_id(db, patient_id)
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    check_patient_access(current_user, patient)
-
     filename_lower = file.filename.lower()
     
     # All accepted extensions — images + PDF
     image_exts = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".heif")
     allowed_extensions = (".pdf",) + image_exts
     
-    # Read file bytes synchronously
+    # 1. Read file bytes synchronously (slow I/O executed before checking out DB connection)
     file_bytes = file.file.read()
 
-    # Perform multi-layer security validation
+    # 2. Perform multi-layer security validation
     from backend.app.core.upload_security import validate_file_upload
     try:
         sanitized_filename = validate_file_upload(
@@ -58,7 +52,7 @@ def upload_report(
 
     file.filename = sanitized_filename
 
-    # Convert any image format to PDF
+    # 3. Convert any image format to PDF (CPU-bound compression executed before checking out DB connection)
     if any(filename_lower.endswith(ext) for ext in image_exts):
         from PIL import Image
         import io
@@ -99,6 +93,13 @@ def upload_report(
                 status_code=400,
                 detail=f"Failed to convert image to PDF: {str(e)}"
             )
+
+    # 4. Defer DB checkout and transaction until file processing completes
+    from backend.app.repositories import patient_repo
+    patient = patient_repo.get_by_id(db, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    check_patient_access(current_user, patient)
 
     try:
         return report_service.upload_report(

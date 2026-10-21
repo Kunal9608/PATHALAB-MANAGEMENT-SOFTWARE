@@ -60,6 +60,7 @@ const Shell = (() => {
       items: [
         { href: '/admin/dashboard',         label: 'Dashboard',        icon: 'grid' },
         { href: '/admin/patients',           label: 'Patients',         icon: 'users' },
+        { href: '/admin/failed-patients',    label: 'Failed Registrations', icon: 'clipboard' },
         { href: '/admin/staff',              label: 'Staff',            icon: 'user-check' },
         { href: '/admin/tests',              label: 'Tests',            icon: 'flask' },
         { href: '/admin/doctors',            label: 'Doctors',          icon: 'stethoscope' },
@@ -88,6 +89,7 @@ const Shell = (() => {
       items: [
         { href: '/staff/add-patient',        label: 'Add Patient',      icon: 'user-plus' },
         { href: '/staff/patients',           label: 'Patients',         icon: 'users' },
+        { href: '/staff/failed-patients',    label: 'Failed Registrations', icon: 'clipboard' },
       ],
     },
     {

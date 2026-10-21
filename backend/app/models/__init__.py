@@ -17,6 +17,7 @@ from backend.app.models.otp_request import OtpRequest, OtpPurposeEnum
 from backend.app.models.patient_status_history import PatientStatusHistory
 from backend.app.models.test_parameter import TestParameter
 from backend.app.models.patient_test_result import PatientTestResult
+from backend.app.models.cached_patient_registration import CachedPatientRegistration
 
 __all__ = [
     "User", "RoleEnum", "ViewScopeEnum",
@@ -37,4 +38,5 @@ __all__ = [
     "PatientStatusHistory",
     "TestParameter",
     "PatientTestResult",
+    "CachedPatientRegistration",
 ]

@@ -612,14 +612,14 @@
     try {
       const isOnline = await OfflineQueue.isOnline();
       if (!isOnline) {
-        await OfflineQueue.enqueue(
+        const tempRef = await OfflineQueue.enqueue(
           editId ? `/api/v1/patients/${editId}` : '/api/v1/patients',
           editId ? 'PATCH' : 'POST',
           payload,
           idempotencyKey,
         );
         localStorage.removeItem('akriti_patient_draft');
-        Toast.show('Offline: patient saved locally and will sync when online.', 'warning', 6000);
+        Toast.show(`Offline: Patient registration saved locally [${tempRef}] and queued for sync.`, 'warning', 6000);
         PatientForm.clearForm();
         document.getElementById('patient-main-form').reset();
         showStep(1);

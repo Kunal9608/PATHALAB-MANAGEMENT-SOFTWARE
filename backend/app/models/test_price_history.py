@@ -13,10 +13,10 @@ class TestPriceHistory(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
                 server_default=text("gen_random_uuid()"))
-    test_id = Column(UUID(as_uuid=True), ForeignKey("tests.id", ondelete="CASCADE"), nullable=False)
+    test_id = Column(UUID(as_uuid=True), ForeignKey("tests.id", ondelete="CASCADE"), nullable=False, index=True)
     old_price = Column(Numeric(10, 2), nullable=True)
     new_price = Column(Numeric(10, 2), nullable=False)
-    changed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    changed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     changed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     test = relationship("Test", back_populates="price_history")

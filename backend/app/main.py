@@ -17,17 +17,20 @@ from backend.app.core.limiter import limiter
 
 from backend.app.config import settings
 from backend.app.dependencies import require_admin, get_current_user
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend.app.middleware.error_handler import (
+    http_exception_handler,
     validation_exception_handler,
     value_error_handler,
     permission_error_handler,
+    timeout_exception_handler,
     generic_exception_handler,
 )
 from backend.app.routers import (
     auth_router, staff_router, attendance_router,
     patient_router, test_router, report_router,
     finance_router, security_router, copilot_router,
-    whatsapp_router,
+    whatsapp_router, offline_patient_router,
 )
 from backend.app.core.db import init_db, get_db
 from sqlalchemy.orm import Session
@@ -53,14 +56,28 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             if attempt < 3:
                 import time
-                time.sleep(2)
             else:
                 print(f"  [WARN] DB init: {e}")
                 if settings.is_production:
                     import sys
                     print("  [FATAL] Database initialization failed in production. Exiting to prevent silent failures.")
-                    sys.exit(1)
+
+    # Recover any stale offline syncing jobs left by previous server crash
+    try:
+        from backend.app.core.db import SessionLocal
+        from backend.app.services.offline_patient_service import recover_stale_syncing_jobs
+        with SessionLocal() as db:
+            recover_stale_syncing_jobs(db, max_age_seconds=60)
+    except Exception as e:
+        print(f"  [WARN] Stale syncing recovery on startup: {e}")
+
     yield
+    # Graceful shutdown: close all pooled database connections to prevent connection leaks
+    try:
+        from backend.app.core.db import engine
+        engine.dispose()
+    except Exception as e:
+        print(f"  [WARN] Database engine disposal on shutdown: {e}")
 
 
 # Disable Swagger UI and ReDoc in production to prevent API schema exposure
@@ -114,6 +131,13 @@ async def clean_urls_middleware(request: Request, call_next):
     if path.startswith("/api/") or path == "/health" or path.startswith("/docs") or path.startswith("/redoc"):
         return await call_next(request)
         
+    # Check if request is for root /
+    if path == "/":
+        file_path = FRONTEND_DIR / "index.html"
+        if file_path.is_file():
+            from fastapi.responses import FileResponse
+            return FileResponse(str(file_path), media_type="text/html")
+
     # Check if request is for a clean HTML path (e.g. /admin/dashboard)
     last_segment = path.split("/")[-1]
     if not path.endswith("/") and "." not in last_segment:
@@ -190,11 +214,14 @@ async def add_security_headers(request: Request, call_next):
 
 # ── Exception handlers ────────────────────────────────────────────────────────
 # pyrefly: ignore [bad-argument-type]
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+# pyrefly: ignore [bad-argument-type]
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 # pyrefly: ignore [bad-argument-type]
 app.add_exception_handler(ValueError, value_error_handler)
 # pyrefly: ignore [bad-argument-type]
 app.add_exception_handler(PermissionError, permission_error_handler)
+app.add_exception_handler(TimeoutError, timeout_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
 # ── API routers ───────────────────────────────────────────────────────────────
@@ -209,13 +236,37 @@ app.include_router(finance_router.router, prefix=API_PREFIX)
 app.include_router(security_router.router, prefix=API_PREFIX)
 app.include_router(copilot_router.router, prefix=API_PREFIX)
 app.include_router(whatsapp_router.router, prefix=API_PREFIX)
+app.include_router(offline_patient_router.router, prefix=API_PREFIX)
+
+
+# ── Catch-all for unmatched API routes ───────────────────────────────────────
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"], include_in_schema=False)
+async def api_catch_all_not_found(request: Request, path: str):
+    import uuid
+    req_id = str(uuid.uuid4())
+    detail_msg = f"API endpoint not found: /api/{path}"
+    return JSONResponse(
+        status_code=404,
+        content={
+            "success": False,
+            "detail": detail_msg,
+            "message": detail_msg,
+            "error": {
+                "code": "RESOURCE_NOT_FOUND",
+                "message": detail_msg,
+                "request_id": req_id
+            }
+        }
+    )
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/health")
-def health(check_db: bool = False, db: Session = Depends(get_db)):
+def health(check_db: bool = False):
     if check_db:
         from sqlalchemy import text
+        from backend.app.core.db import SessionLocal
+        db = SessionLocal()
         try:
             db.execute(text("SELECT 1"))
             return {"status": "ok", "service": "Akriti Lab Management System", "database": "connected"}
@@ -225,6 +276,8 @@ def health(check_db: bool = False, db: Session = Depends(get_db)):
                 status_code=503,
                 content={"status": "error", "service": "Akriti Lab Management System", "database": "disconnected", "detail": detail}
             )
+        finally:
+            db.close()
     return {"status": "ok", "service": "Akriti Lab Management System"}
 
 
@@ -434,7 +487,7 @@ if FRONTEND_DIR.exists():
             app.mount(f"/{sub}", StaticFiles(directory=str(sub_dir)), name=sub)
 
     # Serve root-level HTML pages and service worker
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=False), name="frontend")
 else:
     @app.get("/")
     def root():

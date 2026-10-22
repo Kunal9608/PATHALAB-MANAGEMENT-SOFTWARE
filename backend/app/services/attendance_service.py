@@ -11,8 +11,22 @@ from backend.app.services import audit_service, face_service
 
 def log_attendance(db: Session, user_id: uuid.UUID, confidence: float,
                    device_id: Optional[str] = None, source: str = "online") -> dict:
-    """FR-3.1 — Determine check_in or check_out based on last event today."""
+    """FR-3.1 — Determine check_in or check_out based on last event today with 60s cooldown."""
+    from datetime import timezone
     last_event = attendance_repo.get_last_event_today(db, user_id)
+
+    # 60-second debounce check to prevent accidental double punch / flip-flop
+    now = datetime.now(timezone.utc)
+    if last_event and last_event.event_time:
+        event_time = last_event.event_time
+        if event_time.tzinfo is None:
+            event_time = event_time.replace(tzinfo=timezone.utc)
+        elapsed_seconds = (now - event_time).total_seconds()
+        if elapsed_seconds < 60:
+            user = user_repo.get_by_id(db, user_id)
+            user_name = user.name if user else "Staff"
+            wait_sec = max(1, int(60 - elapsed_seconds))
+            raise ValueError(f"Punch already recorded for {user_name} recently. Please wait {wait_sec}s before punching again.")
 
     # If no event today or last was check_out → check_in; else check_out
     if last_event is None or last_event.event_type == "check_out":
@@ -61,7 +75,17 @@ def recognize_and_log(db: Session, image_bytes: bytes,
     user_id = uuid.UUID(result["user_id"])
     confidence = result["confidence"]
 
-    return log_attendance(db, user_id, confidence, device_id)
+    try:
+        return log_attendance(db, user_id, confidence, device_id)
+    except ValueError as e:
+        return {
+            "matched": True,
+            "cooldown": True,
+            "reason": str(e),
+            "confidence": confidence,
+            "message": str(e)
+        }
+
 
 
 def get_attendance_report(

@@ -268,15 +268,18 @@
     
     // Set email switch state
     const toggleEmailBtn = document.getElementById('toggle-email');
-    if (lab.email_notifications_enabled) {
-      toggleEmailBtn.classList.add('on');
-    } else {
-      toggleEmailBtn.classList.remove('on');
+    if (toggleEmailBtn) {
+      if (lab.email_notifications_enabled) {
+        toggleEmailBtn.classList.add('on');
+      } else {
+        toggleEmailBtn.classList.remove('on');
+      }
     }
   } catch {}
 
-  document.getElementById('toggle-email').addEventListener('click', async () => {
+  document.getElementById('toggle-email')?.addEventListener('click', async () => {
     const btn = document.getElementById('toggle-email');
+    if (!btn) return;
     const newState = !btn.classList.contains('on');
     try {
       const updated = await API.patch('/api/v1/settings/lab', {
@@ -294,8 +297,9 @@
     }
   });
 
-  document.getElementById('toggle-sms').addEventListener('click', () => {
+  document.getElementById('toggle-sms')?.addEventListener('click', () => {
     const btn = document.getElementById('toggle-sms');
+    if (!btn) return;
     if (btn.classList.contains('on')) {
       btn.classList.remove('on');
     } else {
@@ -307,17 +311,18 @@
     }
   });
 
-  document.getElementById('save-lab-btn').addEventListener('click', async () => {
+  document.getElementById('save-lab-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('save-lab-btn');
+    if (!btn) return;
     btn.setAttribute('aria-busy','true'); btn.innerHTML = `<span class="btn-loading-spinner"></span> Saving...`;
     try {
       await API.patch('/api/v1/settings/lab', {
-        lab_name:    document.getElementById('lab-name').value.trim(),
-        lab_address: document.getElementById('lab-address').value.trim(),
-        lab_phone:   document.getElementById('lab-phone').value.trim(),
-        lab_upi_vpa: document.getElementById('lab-upi').value.trim(),
-        lab_gstin:   document.getElementById('lab-gstin').value.trim(),
-        report_footer: document.getElementById('lab-footer').value.trim(),
+        lab_name:    document.getElementById('lab-name')?.value?.trim() || '',
+        lab_address: document.getElementById('lab-address')?.value?.trim() || '',
+        lab_phone:   document.getElementById('lab-phone')?.value?.trim() || '',
+        lab_upi_vpa: document.getElementById('lab-upi')?.value?.trim() || '',
+        lab_gstin:   document.getElementById('lab-gstin')?.value?.trim() || '',
+        report_footer: document.getElementById('lab-footer')?.value?.trim() || '',
       });
       Toast.show('Lab settings saved', 'success');
     } catch { Toast.show('Failed to save settings', 'error'); }
@@ -392,15 +397,15 @@
   });
   lhTable.load();
 
-  document.getElementById('lh-outcome').addEventListener('change', e => { lhTable.setFilter('outcome', e.target.value); lhTable.load(); });
+  document.getElementById('lh-outcome')?.addEventListener('change', e => { lhTable.setFilter('outcome', e.target.value); lhTable.load(); });
 
   // ── Danger Zone: Delete Everything ──────────────────────────────────────────
   const requestOtpBtn = document.getElementById('request-delete-otp-btn');
   const otpSection = document.getElementById('otp-section');
   const deleteBtn = document.getElementById('delete-everything-btn');
 
-  requestOtpBtn.addEventListener('click', async () => {
-    const password = document.getElementById('safety-password').value.trim();
+  requestOtpBtn?.addEventListener('click', async () => {
+    const password = document.getElementById('safety-password')?.value?.trim();
     if (!password) { Toast.show('Account password is required', 'warning'); return; }
 
     requestOtpBtn.setAttribute('aria-busy', 'true');
@@ -409,9 +414,10 @@
     try {
       await API.post('/api/v1/settings/delete-request-otp', { password });
       Toast.show('Verification OTP has been sent to your email', 'success');
-      otpSection.style.display = 'block';
+      if (otpSection) otpSection.style.display = 'block';
       requestOtpBtn.style.display = 'none';
-      document.getElementById('safety-password').disabled = true;
+      const sp = document.getElementById('safety-password');
+      if (sp) sp.disabled = true;
     } catch (err) {
       Toast.show(err.message || 'Failed to send OTP', 'error');
     } finally {
@@ -420,7 +426,7 @@
     }
   });
 
-  deleteBtn.addEventListener('click', async () => {
+  deleteBtn?.addEventListener('click', async () => {
     const password = document.getElementById('safety-password').value.trim();
     const otp = document.getElementById('delete-otp').value.trim();
 

@@ -5,6 +5,7 @@ Designed for PRE-PRINTED A4 stationery.
 """
 import io
 import os
+import html
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -13,6 +14,15 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+def safe_p(val, style):
+    """Safely escapes text before passing into ReportLab Paragraph to prevent XML parsing crashes & XSS."""
+    if val is None:
+        text = ""
+    else:
+        text = html.escape(str(val))
+    return Paragraph(text, style)
+
 
 class PushToBottom(Spacer):
     """
@@ -211,27 +221,27 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
     demo_data = [
         [
             Paragraph("Name:", label_style),
-            Paragraph(patient.name.upper(), value_style),
+            safe_p(patient.name.upper(), value_style),
             Paragraph("Patient ID:", label_style),
-            Paragraph(str(patient.patient_code), value_style)
+            safe_p(str(patient.patient_code), value_style)
         ],
         [
             Paragraph("Number:", label_style),
-            Paragraph(patient.mobile or "—", value_style),
+            safe_p(patient.mobile or "—", value_style),
             Paragraph("Gender:", label_style),
-            Paragraph(gender_str, value_style)
+            safe_p(gender_str, value_style)
         ],
         [
             Paragraph("Age:", label_style),
-            Paragraph(f"{patient.age} Years", value_style),
+            safe_p(f"{patient.age} Years", value_style),
             Paragraph("Referred By:", label_style),
-            Paragraph(doctor_name.upper(), value_style)
+            safe_p(doctor_name.upper(), value_style)
         ],
         [
             Paragraph("Collection Date:", label_style),
-            Paragraph(sample_date_str, value_style),
+            safe_p(sample_date_str, value_style),
             Paragraph("Report Date:", label_style),
-            Paragraph(report_date_str, value_style)
+            safe_p(report_date_str, value_style)
         ]
     ]
 
@@ -254,7 +264,7 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
     col_widths = [190, 110, 110, 113]  # Total 523pt
 
     for test_group in booked_tests_data:
-        story.append(Paragraph(f"** REPORT OF {test_group['test_name'].upper()} **", test_heading_style))
+        story.append(safe_p(f"** REPORT OF {test_group['test_name'].upper()} **", test_heading_style))
 
         table_rows = [
             [
@@ -270,18 +280,16 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
             unit_str = p.get("unit") or ""
             ref_str = p.get("reference") or ""
 
-            # Optional: format abnormal results in bold
-            if p.get("is_abnormal"):
-                val_para = Paragraph(val_str, td_bold_style)
-            else:
-                val_para = Paragraph(val_str, td_style)
+            val_style_chosen = td_bold_style if p.get("is_abnormal") else td_style
+            val_para = safe_p(val_str, val_style_chosen)
 
             table_rows.append([
-                Paragraph(p["name"], td_style),
+                safe_p(p["name"], td_style),
                 val_para,
-                Paragraph(unit_str, td_style),
-                Paragraph(ref_str, td_style)
+                safe_p(unit_str, td_style),
+                safe_p(ref_str, td_style)
             ])
+
 
         t = Table(table_rows, colWidths=col_widths, repeatRows=1)
         t_style = [

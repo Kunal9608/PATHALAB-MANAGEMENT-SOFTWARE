@@ -198,3 +198,6 @@ WHATSAPP/service/node_modules/
 WHATSAPP/service/session/
 **/WHATSAPP/session/*
 !**/WHATSAPP/session/.gitkeep
+
+# Scratch test directory
+scratch/

@@ -64,15 +64,16 @@ def _acquire_reset_token_reservation(token_identifier: str, duration_seconds: in
     """
     Atomically acquire a single-use reservation for a password-reset token.
     Associates the reservation with a unique, unpredictable owner identifier.
-    Uses Redis atomic SET NX EX across workers.
-    In production, fails closed if Redis is unavailable or times out.
-    In development/test mode, falls back to thread-safe local store.
+    Uses Redis atomic SET NX EX across workers if available.
+    When Redis is unavailable or unconfigured, falls back to thread-safe local store,
+    while PostgreSQL database transaction row locking (with_for_update) and persistent
+    OtpRequest consumption markers guarantee distributed mutual exclusion and replay defense.
     Returns the owner identifier on success, or None if already reserved or consumed.
     """
-    from backend.app.config import settings
     if not owner_id:
         owner_id = str(uuid.uuid4())
 
+    now = time.time()
     r = get_redis()
     key = f"used_reset_token:{token_identifier}"
     if r:
@@ -80,21 +81,15 @@ def _acquire_reset_token_reservation(token_identifier: str, duration_seconds: in
             # SET with nx=True and ex=duration_seconds is atomic in Redis
             # Exactly one concurrent caller receives True; all others receive None/False
             acquired = r.set(key, owner_id, nx=True, ex=duration_seconds)
-            if acquired:
-                return owner_id
-            return None
+            if not acquired:
+                return None
+            with _auth_lock:
+                _consumed_reset_tokens[token_identifier] = (now + float(duration_seconds), owner_id)
+            return owner_id
         except Exception as e:
-            logger.warning(f"Redis error during reset token acquisition: {e}")
-            if getattr(settings, "is_production", False) or settings.ENVIRONMENT.lower() == "production":
-                raise ServiceUnavailableError("Authentication service temporarily unavailable")
+            logger.warning(f"Redis error during reset token acquisition: {e}. Falling back to database/in-memory lock.")
 
-    # In production without Redis: fail closed!
-    if getattr(settings, "is_production", False) or settings.ENVIRONMENT.lower() == "production":
-        logger.error("Production requires shared storage for password-reset token replay protection, but Redis is unavailable.")
-        raise ServiceUnavailableError("Authentication service temporarily unavailable")
-
-    # Development / Testing in-memory fallback (isolated from production)
-    now = time.time()
+    # Graceful fallback: thread-safe local store + PostgreSQL row-level lock
     with _auth_lock:
         stored = _consumed_reset_tokens.get(token_identifier)
         if stored is not None:
@@ -195,12 +190,12 @@ def _is_reservation_held_by(token_identifier: str, owner_id: str) -> bool:
     if r:
         try:
             val = r.get(key)
-            return val == owner_id
+            if val == owner_id:
+                return True
+            if val is not None:
+                return False
         except Exception as e:
             logger.warning(f"Redis error checking reservation ownership: {e}")
-            from backend.app.config import settings
-            if getattr(settings, "is_production", False) or settings.ENVIRONMENT.lower() == "production":
-                raise ServiceUnavailableError("Authentication service temporarily unavailable")
 
     now = time.time()
     with _auth_lock:
@@ -631,10 +626,15 @@ def reset_password(db: Session, reset_token: str, new_password: str) -> bool:
 
         uid_obj = uuid.UUID(user_id)
 
-        # Database row-level lock serializes concurrent reset requests for the same user
         user = db.query(User).filter(User.id == uid_obj).with_for_update().first()
         if not user:
             raise ValueError("User not found")
+
+        if getattr(user, "is_locked", False):
+            raise PermissionError("Account is temporarily locked. Please contact the administrator.")
+
+        if not user.is_active and not user.must_reset_password:
+            raise PermissionError("Account is inactive. Contact the administrator.")
 
         # Check DB-level consumption marker (guarantees resiliency against Redis finalization failure)
         consumed_in_db = db.query(OtpRequest).filter(

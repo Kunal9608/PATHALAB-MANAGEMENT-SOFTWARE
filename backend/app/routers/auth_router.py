@@ -157,15 +157,28 @@ def reset_password(payload: PasswordResetRequest, request: Request, response: Re
     from backend.app.services.auth_service import _parse_device_label
     import uuid
 
+    import jwt
+    from sqlalchemy.exc import OperationalError, InterfaceError
+    from backend.app.core.security import validate_password_policy
+
+    # Validate confirmation if provided
+    if payload.confirm_password is not None and payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    if not validate_password_policy(payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must be between 6 and 12 characters with at least one letter and one digit")
+
     try:
         token_payload = decode_token(payload.reset_token)
         if token_payload.get("type") != "short" or token_payload.get("purpose") != "password_reset":
-            raise ValueError("Invalid token")
+            raise ValueError("Invalid reset token type or purpose")
         user_id = token_payload.get("sub")
         if not user_id:
-            raise ValueError("Invalid token: missing subject")
+            raise ValueError("Invalid reset token: missing subject")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Reset token has expired. Please log in again.")
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        raise HTTPException(status_code=401, detail="Invalid or expired reset token")
 
     try:
         auth_service.reset_password(db, payload.reset_token, payload.new_password)
@@ -173,10 +186,22 @@ def reset_password(payload: PasswordResetRequest, request: Request, response: Re
         if type(e).__name__ == "ServiceUnavailableError":
             raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable")
         if isinstance(e, ValueError):
-            raise HTTPException(status_code=400, detail=str(e))
+            msg = str(e)
+            if "already been used" in msg.lower():
+                raise HTTPException(status_code=409, detail=msg)
+            raise HTTPException(status_code=400, detail=msg)
+        if isinstance(e, PermissionError):
+            raise HTTPException(status_code=403, detail=str(e))
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        msg = str(e)
+        if "already been used" in msg.lower():
+            raise HTTPException(status_code=409, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except (OperationalError, InterfaceError):
+        raise HTTPException(status_code=503, detail="Database service temporarily unavailable. Please try again.")
 
     user = user_repo.get_by_id(db, uuid.UUID(user_id))
     if not user:
@@ -196,16 +221,18 @@ def reset_password(payload: PasswordResetRequest, request: Request, response: Re
 
     secure = settings.cookie_secure
     response.set_cookie("access_token", access_token,
-                        httponly=True, secure=secure, samesite="strict",
+                        path="/", httponly=True, secure=secure, samesite="strict",
                         max_age=settings.JWT_ACCESS_EXPIRE_MINUTES * 60)
     response.set_cookie("refresh_token", refresh_token,
-                        httponly=True, secure=secure, samesite="strict",
+                        path="/", httponly=True, secure=secure, samesite="strict",
                         max_age=settings.JWT_REFRESH_EXPIRE_HOURS * 3600)
 
     return {
         "message": "Password reset and logged in successfully",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "role": user.role,
-        "user": {"id": str(user.id), "name": user.name, "role": user.role}
+        "user": {"id": str(user.id), "name": user.name, "role": user.role, "email": user.email}
     }
 
 

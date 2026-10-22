@@ -135,16 +135,16 @@
     </div>
     <div class="modal-body">
       <p class="text-muted text-sm mb-4">This is your first login. Please set a new password before continuing.</p>
-      <form id="reset-form" novalidate>
+      <form id="reset-form" onsubmit="event.preventDefault(); document.getElementById('reset-submit-btn').click();" novalidate>
         <div class="form-field mb-4">
           <label class="form-label" for="new-password">New Password <span class="required">*</span></label>
           <div style="position: relative;">
-            <input class="form-input" type="password" id="new-password" placeholder="Min 6 chars, letters and digits" style="padding-right: 40px;">
+            <input class="form-input" type="password" id="new-password" placeholder="6-12 chars, letters and digits" style="padding-right: 40px;">
             <button type="button" class="password-toggle-btn" data-target="new-password" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; cursor: pointer; color: var(--color-ink-muted); display: flex; align-items: center;" aria-label="Show password">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
-          <span class="form-hint">Must contain at least one letter and one digit. No special characters.</span>
+          <span class="form-hint">Must be 6–12 characters with at least one letter and one digit. No special characters.</span>
         </div>
         <div class="form-field">
           <label class="form-label" for="confirm-password">Confirm Password <span class="required">*</span></label>
@@ -187,17 +187,34 @@
 
   async function getRecaptchaToken(actionName) {
     if (!recaptchaEnabled || !recaptchaKey) return null;
+    if (typeof grecaptcha === 'undefined' || !grecaptcha.ready) {
+      console.warn("reCAPTCHA not loaded or blocked by browser extension/ad-blocker.");
+      return null;
+    }
     return new Promise((resolve) => {
-      grecaptcha.ready(function() {
-        grecaptcha.execute(recaptchaKey, {action: actionName}).then(function(token) {
-          resolve(token);
-        }).catch(err => {
-          console.error("reCAPTCHA execution error:", err);
-          resolve(null);
+      const timeout = setTimeout(() => {
+        console.warn("reCAPTCHA execution timed out (3s). Proceeding with login.");
+        resolve(null);
+      }, 3000);
+      try {
+        grecaptcha.ready(function() {
+          grecaptcha.execute(recaptchaKey, {action: actionName}).then(function(token) {
+            clearTimeout(timeout);
+            resolve(token);
+          }).catch(err => {
+            clearTimeout(timeout);
+            console.error("reCAPTCHA execution error:", err);
+            resolve(null);
+          });
         });
-      });
+      } catch (e) {
+        clearTimeout(timeout);
+        console.error("reCAPTCHA ready call failed:", e);
+        resolve(null);
+      }
     });
   }
+
 
   // Load Settings and optionally load reCAPTCHA script
   try {
@@ -373,30 +390,47 @@
 
   // ── Password Reset ────────────────────────────────────────────────────────
   document.getElementById('reset-submit-btn').addEventListener('click', async () => {
-    const pw  = document.getElementById('new-password').value;
-    const pw2 = document.getElementById('confirm-password').value;
-    const policy = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{6,13}$/;
-
-    if (!policy.test(pw)) {
-      Toast.show('Password must be between 6 and 13 characters with letters and digits (no special chars)', 'error');
+    if (!resetToken) {
+      Toast.show('Session expired. Please log in again.', 'warning');
+      Modal.close('reset-modal');
       return;
     }
-    if (pw !== pw2) { Toast.show('Passwords do not match', 'error'); return; }
+
+    const pw  = document.getElementById('new-password').value;
+    const pw2 = document.getElementById('confirm-password').value;
+    const policy = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{6,12}$/;
+
+    if (!pw) {
+      Toast.show('Please enter a new password', 'warning');
+      return;
+    }
+    if (!policy.test(pw)) {
+      Toast.show('Password must be between 6 and 12 characters with letters and digits (no special chars)', 'error');
+      return;
+    }
+    if (pw !== pw2) {
+      Toast.show('Passwords do not match', 'error');
+      return;
+    }
 
     const btn = document.getElementById('reset-submit-btn');
     btn.setAttribute('aria-busy', 'true');
+    btn.disabled = true;
     btn.innerHTML = `<span class="btn-loading-spinner"></span> Saving...`;
 
     try {
       const res = await API.post('/api/v1/auth/password/reset', {
-        reset_token: resetToken, new_password: pw,
+        reset_token: resetToken,
+        new_password: pw,
+        confirm_password: pw2,
       }, { silent: true });
       Modal.close('reset-modal');
-      Toast.show('Password set. Redirecting...', 'success');
+      Toast.show('Password set successfully. Redirecting...', 'success');
       setTimeout(() => redirect(res.role || res.user?.role), 1000);
     } catch (err) {
-      Toast.show(err.message || 'Failed to reset password', 'error');
+      Toast.show(err.message || 'Failed to set password', 'error');
       btn.removeAttribute('aria-busy');
+      btn.disabled = false;
       btn.innerHTML = 'Set Password &amp; Continue';
     }
   });

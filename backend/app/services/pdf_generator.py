@@ -102,15 +102,17 @@ def generate_patients_pdf(patients) -> bytes:
         if disc > 0:
             billing_text = f"Net: {net:.0f}\n" + billing_text
             
+        import html
         data.append([
             Paragraph(p.created_at.strftime('%d-%b-%Y') if p.created_at else "—", cell_style),
-            Paragraph(p.patient_code, cell_bold_style),
-            Paragraph(p.name, cell_bold_style),
-            Paragraph(f"{p.age} y / {p.gender.value[0].upper() if hasattr(p.gender, 'value') else str(p.gender)[0].upper() if p.gender else '—'}", cell_style),
-            Paragraph(p.mobile or "—", cell_style),
-            Paragraph(test_names or "—", cell_style),
-            Paragraph(billing_text.replace("\n", "<br/>"), cell_style)
+            Paragraph(html.escape(str(p.patient_code)), cell_bold_style),
+            Paragraph(html.escape(str(p.name)), cell_bold_style),
+            Paragraph(html.escape(f"{p.age} y / {p.gender.value[0].upper() if hasattr(p.gender, 'value') else str(p.gender)[0].upper() if p.gender else '—'}"), cell_style),
+            Paragraph(html.escape(str(p.mobile or "—")), cell_style),
+            Paragraph(html.escape(str(test_names or "—")), cell_style),
+            Paragraph(html.escape(billing_text).replace("\n", "<br/>"), cell_style)
         ])
+
         
     # Table column widths (Total = 523pt)
     col_widths = [65, 70, 90, 50, 65, 100, 83]

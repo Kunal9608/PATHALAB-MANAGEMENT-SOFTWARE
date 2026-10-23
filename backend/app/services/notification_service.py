@@ -26,17 +26,12 @@ class NotificationProvider(ABC):
 class EmailProvider(NotificationProvider):
     BRAND = "Akriti Diagnostics Center"
     BRAND_SHORT = "Akriti Diagnostics"
+    # Restrained neutral palette; no bright color-coded blocks.
     COLORS = {
-        "primary": "#176B55",
-        "primary_dark": "#104D3E",
-        "primary_soft": "#EAF5F0",
-        "ink": "#172923",
-        "muted": "#65756E",
-        "border": "#DCE8E2",
-        "surface": "#F5F8F6",
-        "white": "#FFFFFF",
-        "danger": "#A62B35",
-        "danger_soft": "#FFF1F1",
+        "primary": "#30343B", "primary_dark": "#20242A", "primary_soft": "#F4F5F6",
+        "ink": "#20242A", "muted": "#626A73", "border": "#E2E5E8",
+        "surface": "#F7F8F9", "white": "#FFFFFF", "danger": "#30343B",
+        "danger_soft": "#F4F5F6",
     }
 
     @staticmethod
@@ -57,15 +52,10 @@ class EmailProvider(NotificationProvider):
 
     def _layout(self, *, preheader: str, eyebrow: str, title: str, content: str,
                 tone: str = "success", footer_note: str = "This is an automated message.") -> str:
-        """Render a modern, light, table-based email layout compatible with major email clients."""
-        c = self.COLORS
+        # Render a restrained, mobile-friendly notification email.
         safe_preheader = self._escape(preheader)
-        safe_eyebrow = self._escape(eyebrow)
         safe_title = self._escape(title)
         safe_footer = self._escape(footer_note)
-        accent = c["danger"] if tone == "danger" else c["primary"]
-        accent_soft = c["danger_soft"] if tone == "danger" else c["primary_soft"]
-
         return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -75,36 +65,28 @@ class EmailProvider(NotificationProvider):
   <meta name="supported-color-schemes" content="light">
   <title>{safe_title}</title>
 </head>
-<body style="margin:0;padding:0;background:#F2F5F4;font-family:Arial,Helvetica,sans-serif;color:#172923;-webkit-text-size-adjust:100%;">
+<body style="margin:0;padding:0;background:#F5F6F7;font-family:Arial,Helvetica,sans-serif;color:#252A30;-webkit-text-size-adjust:100%;">
   <div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">{safe_preheader}</div>
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background:#F2F5F4;border-collapse:collapse;">
-    <tr><td align="center" style="padding:28px 12px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;border-collapse:separate;border-spacing:0;background:#FFFFFF;border:1px solid #E0E8E4;border-radius:18px;overflow:hidden;">
-        <tr><td style="height:5px;line-height:5px;font-size:0;background:{accent};">&nbsp;</td></tr>
-        <tr><td style="padding:22px 28px 20px;background:#FFFFFF;border-bottom:1px solid #EAF0ED;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;width:100%;"><tr>
-            <td width="42" valign="middle" style="width:42px;padding-right:12px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="40" style="width:40px;border-collapse:separate;border-spacing:0;"><tr><td align="center" valign="middle" width="40" height="40" style="width:40px;height:40px;border-radius:12px;background:{accent_soft};color:{accent};font-size:20px;line-height:40px;font-weight:700;">A</td></tr></table>
-            </td>
-            <td valign="middle" style="font-size:15px;line-height:21px;font-weight:700;color:#18372D;">{self.BRAND}<div style="padding-top:3px;font-size:11px;line-height:16px;font-weight:400;color:#718078;">DIAGNOSTIC SERVICES</div></td>
-            <td align="right" valign="middle" style="font-size:10px;line-height:15px;font-weight:700;letter-spacing:.7px;color:{accent};text-transform:uppercase;">SECURE MESSAGE</td>
-          </tr></table>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#F5F6F7" style="width:100%;border-collapse:collapse;background:#F5F6F7;">
+    <tr><td align="center" style="padding:22px 12px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="540" bgcolor="#FFFFFF" style="width:100%;max-width:540px;border-collapse:collapse;background:#FFFFFF;border:1px solid #E2E5E8;">
+        <tr><td style="padding:22px 24px 18px;border-bottom:1px solid #E8EAED;background:#FFFFFF;">
+          <div style="font-size:17px;line-height:24px;font-weight:700;color:#252A30;">Akriti Diagnostics Center</div>
+          <div style="padding-top:3px;font-size:12px;line-height:18px;color:#707780;">Automated notification</div>
         </td></tr>
-        <tr><td style="padding:30px 28px 8px;background:#FFFFFF;">
-          <div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:{accent};">{safe_eyebrow}</div>
-          <div style="padding-top:7px;font-size:27px;line-height:34px;font-weight:700;letter-spacing:-.5px;color:#17362C;">{safe_title}</div>
+        <tr><td style="padding:24px 24px 8px;background:#FFFFFF;">
+          <div style="font-size:22px;line-height:29px;font-weight:700;color:#252A30;overflow-wrap:break-word;">{safe_title}</div>
         </td></tr>
-        <tr><td style="padding:18px 28px 30px;background:#FFFFFF;font-size:15px;line-height:25px;color:#24372F;">
+        <tr><td style="padding:12px 24px 26px;background:#FFFFFF;font-size:15px;line-height:24px;color:#333940;">
           {content}
         </td></tr>
-        <tr><td style="padding:0 28px;background:#FFFFFF;"><div style="height:1px;line-height:1px;font-size:0;background:#E6ECE9;">&nbsp;</div></td></tr>
-        <tr><td style="padding:20px 28px 24px;background:#F8FAF9;">
-          <div style="font-size:12px;line-height:19px;color:#596B62;">{safe_footer}</div>
-          <div style="padding-top:13px;font-size:12px;line-height:18px;font-weight:700;letter-spacing:.25px;color:#31483D;">DO NOT REPLY TO THIS EMAIL.</div>
-          <div style="padding-top:5px;font-size:11px;line-height:17px;color:#7A8982;">This mailbox is used for automated notifications from {self.BRAND}.</div>
+        <tr><td style="padding:18px 24px 20px;background:#FAFAFB;border-top:1px solid #E8EAED;">
+          <div style="font-size:12px;line-height:19px;color:#5F6670;">{safe_footer}</div>
+          <div style="padding-top:8px;font-size:12px;line-height:18px;font-weight:700;color:#30353B;">Do not reply to this email.</div>
+          <div style="padding-top:3px;font-size:11px;line-height:17px;color:#7A8189;">This address is used for automated notifications.</div>
         </td></tr>
       </table>
-      <div style="max-width:540px;padding:14px 10px 0;font-size:11px;line-height:17px;color:#7A8982;text-align:center;">Please keep account verification codes and diagnostic reports private. If this message was not intended for you, do not use any code or attachment.</div>
+      <div style="max-width:500px;padding:12px 8px 0;font-size:11px;line-height:17px;color:#7A8189;text-align:center;">Please keep verification codes and diagnostic reports private.</div>
     </td></tr>
   </table>
 </body>
@@ -124,8 +106,8 @@ class EmailProvider(NotificationProvider):
             content = f'''<p style="margin:0 0 14px;">Hello {name},</p>
 <p style="margin:0 0 20px;color:{c['muted']};">Use this one-time password to verify your request. For your security, the code is time-limited.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['primary_soft']};border:1px solid #C9E3D7;border-radius:12px;">
-<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['primary']};">One-time password</div>
-<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['primary_dark']};">{otp}</div>
+<div style="font-size:11px;line-height:16px;letter-spacing:.3px;font-weight:700;color:#555D66;">One-time password</div>
+<div style="padding-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:28px;line-height:36px;font-weight:700;letter-spacing:4px;color:#252A30;">{otp}</div>
 </td></tr></table>
 <p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. Do not share it with anyone, including someone claiming to be from support.</p>
 <p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not request this code, you can ignore this email.</p>'''
@@ -137,8 +119,8 @@ class EmailProvider(NotificationProvider):
             content = f'''<p style="margin:0 0 14px;">Hello {name},</p>
 <p style="margin:0 0 20px;color:{c['muted']};">We received a request to reset your account password. Enter the one-time code below in the password-reset screen to continue.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['primary_soft']};border:1px solid #C9E3D7;border-radius:12px;">
-<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['primary']};">Password reset code</div>
-<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['primary_dark']};">{otp}</div>
+<div style="font-size:11px;line-height:16px;letter-spacing:.3px;font-weight:700;color:#555D66;">Password reset code</div>
+<div style="padding-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:28px;line-height:36px;font-weight:700;letter-spacing:4px;color:#252A30;">{otp}</div>
 </td></tr></table>
 <p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. Never share it with anyone.</p>
 <p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not request a password reset, do not use the code. If you suspect someone has accessed your account, contact your administrator through a trusted channel.</p>'''
@@ -150,8 +132,8 @@ class EmailProvider(NotificationProvider):
             content = f'''<p style="margin:0 0 14px;">Hello {name},</p>
 <p style="margin:0 0 20px;color:{c['muted']};">Use the verification code below to confirm your password-change request.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['primary_soft']};border:1px solid #C9E3D7;border-radius:12px;">
-<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['primary']};">Verification code</div>
-<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['primary_dark']};">{otp}</div>
+<div style="font-size:11px;line-height:16px;letter-spacing:.3px;font-weight:700;color:#555D66;">Verification code</div>
+<div style="padding-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:28px;line-height:36px;font-weight:700;letter-spacing:4px;color:#252A30;">{otp}</div>
 </td></tr></table>
 <p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. Do not share it with anyone.</p>
 <p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not request this change, do not use the code and contact your administrator through a trusted channel.</p>'''
@@ -161,14 +143,14 @@ class EmailProvider(NotificationProvider):
         elif event_type == "delete_verify":
             subject = "Confirmation required for a sensitive data-deletion request"
             content = f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td style="padding:14px 16px;background-color:{c['danger_soft']};border:1px solid #F0CCCC;border-radius:10px;">
-<div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:{c['danger']};">Sensitive action</div>
+<div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:0;color:#555D66;">Sensitive action</div>
 <div style="padding-top:4px;font-size:14px;line-height:22px;font-weight:700;color:#76232A;">Patient data deletion verification</div>
 </td></tr></table>
 <p style="margin:0 0 18px;">Hello {name},</p>
 <p style="margin:0 0 20px;color:{c['muted']};">A request was made to verify a sensitive patient-data deletion action. Enter the one-time code below only if you initiated this request in the application.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['danger_soft']};border:1px solid #F0CCCC;border-radius:12px;">
-<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['danger']};">Confirmation code</div>
-<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['danger']};">{otp}</div>
+<div style="font-size:11px;line-height:16px;letter-spacing:.3px;font-weight:700;color:#555D66;">Confirmation code</div>
+<div style="padding-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:28px;line-height:36px;font-weight:700;letter-spacing:4px;color:#252A30;">{otp}</div>
 </td></tr></table>
 <p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. It verifies the request; it does not itself confirm that deletion has completed.</p>
 <p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not initiate this action, do not share or use the code. Contact your administrator through a trusted channel immediately.</p>'''
@@ -180,8 +162,8 @@ class EmailProvider(NotificationProvider):
             content = f'''<p style="margin:0 0 14px;">Welcome, {name}.</p>
 <p style="margin:0 0 18px;color:{c['muted']};">Your staff profile has been created in the Akriti Diagnostics Center system. Use the initial sign-in credential supplied by your administrator to access the portal.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td style="padding:16px 18px;background-color:{c['surface']};border:1px solid {c['border']};border-radius:10px;">
-<div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:{c['muted']};">Initial sign-in credential</div>
-<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:18px;line-height:26px;font-weight:700;overflow-wrap:anywhere;color:{c['ink']};">{temp_password}</div>
+<div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:0;color:{c['muted']};">Initial sign-in credential</div>
+<div style="padding-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;font-weight:700;overflow-wrap:anywhere;color:#252A30;">{temp_password}</div>
 </td></tr></table>
 <p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">You must change the temporary password at your first sign-in if prompted. Never share your credentials or reuse this password on another service.</p>
 <p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you were not expecting this account, contact your administrator through a trusted channel before signing in.</p>'''
@@ -193,7 +175,7 @@ class EmailProvider(NotificationProvider):
             content = f'''<p style="margin:0 0 14px;">Dear {patient_name},</p>
 <p style="margin:0 0 20px;color:{c['muted']};">Your diagnostic report has been prepared. The attached PDF contains the report document for your reference.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td style="padding:18px;background-color:{c['surface']};border:1px solid {c['border']};border-radius:10px;">
-<div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:{c['muted']};">Report reference</div>
+<div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:0;color:{c['muted']};">Report reference</div>
 <div style="padding-top:6px;font-size:18px;line-height:25px;font-weight:700;color:{c['ink']};">{patient_code}</div>
 <div style="padding-top:10px;font-size:13px;line-height:20px;color:{c['primary']};font-weight:700;">Report prepared</div>
 </td></tr></table>

@@ -6,12 +6,16 @@
  */
 
 // Global helper functions
-if (typeof window.escapeHtml === 'undefined') {
-  window.escapeHtml = function(str) {
-    if (!str) return '';
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  };
-}
+window.escapeHtml = function(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`/g, '&#96;');
+};
 if (typeof window.formatCurrency === 'undefined') {
   window.formatCurrency = function(n) {
     if (n == null) return '—';
@@ -795,15 +799,14 @@ const Shell = (() => {
       _sidebarRendered = true;
 
       // Logout
-      document.getElementById('logout-btn')?.addEventListener('click', async () => {
+      document.getElementById('logout-btn')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         await Modal.confirm('Sign Out', 'Are you sure you want to sign out?', {
           confirmText: 'Sign Out',
           danger: true,
           onConfirm: async () => {
-            try {
-              await API.post('/api/v1/auth/logout', {}, { silent: true });
-            } catch (_) {}
-            window.location.href = '/';
+            await performLogout();
           }
         });
       });
@@ -958,6 +961,31 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Centralized authoritative logout routine
+async function performLogout() {
+  try {
+    if (window.OfflineQueue && typeof window.OfflineQueue.stop === 'function') {
+      window.OfflineQueue.stop();
+    }
+    if (window.API && typeof window.API.clearLocalAuthState === 'function') {
+      await window.API.clearLocalAuthState();
+    } else {
+      localStorage.removeItem('akriti_current_user');
+      localStorage.removeItem('akriti_tests_cache');
+      if (window.CacheManager) {
+        try { await window.CacheManager.invalidate('.*'); } catch (_) {}
+      }
+      try {
+        await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch (_) {}
+      document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=strict";
+      document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=strict";
+    }
+  } catch (_) {}
+  window.location.href = '/';
+}
+Shell.logout = performLogout;
+
 // Global logout button handler via event delegation (works across all SPA views)
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('#logout-btn');
@@ -968,18 +996,12 @@ document.addEventListener('click', async (e) => {
         confirmText: 'Sign Out',
         danger: true,
         onConfirm: async () => {
-          try {
-            await API.post('/api/v1/auth/logout', {}, { silent: true });
-          } catch (_) {}
-          window.location.href = '/';
+          await performLogout();
         }
       });
     } else {
       if (confirm('Are you sure you want to sign out?')) {
-        try {
-          await API.post('/api/v1/auth/logout', {}, { silent: true });
-        } catch (_) {}
-        window.location.href = '/';
+        await performLogout();
       }
     }
   }

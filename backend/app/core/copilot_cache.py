@@ -80,7 +80,11 @@ def _get_async_pool() -> Optional[aioredis.ConnectionPool]:
             }
             if settings.REDIS_URL.startswith("rediss://"):
                 import ssl
-                kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+                verify_ssl = os.getenv("REDIS_SSL_VERIFY", "true").lower() in ("true", "1", "yes")
+                kwargs["ssl_cert_reqs"] = ssl.CERT_REQUIRED if verify_ssl else ssl.CERT_NONE
+                ca_certs = os.getenv("REDIS_SSL_CA_CERTS")
+                if ca_certs and os.path.exists(ca_certs):
+                    kwargs["ssl_ca_certs"] = ca_certs
 
             _async_pool = aioredis.ConnectionPool.from_url(
                 settings.REDIS_URL,

@@ -74,14 +74,33 @@ const CacheManager = (() => {
     }
   }
 
-  // Preload endpoints silently in the background
+  function getCurrentUserId() {
+    if (typeof window !== 'undefined') {
+      if (window._me && window._me.id) return String(window._me.id);
+      try {
+        const u = JSON.parse(localStorage.getItem('akriti_current_user') || '{}');
+        return u.id ? String(u.id) : null;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  function buildKey(method = 'GET', path = '', body = null, userId = null) {
+    const m = (method || 'GET').toUpperCase();
+    const uid = userId || getCurrentUserId() || 'public';
+    const bodyStr = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : '';
+    return `${uid}:${m}:${path}:${bodyStr}`;
+  }
+
+  // Preload endpoints silently in the background using canonical request key
   function prefetch(endpoints) {
     endpoints.forEach(async (path) => {
       try {
         const res = await fetch(path, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
-          await set(path, data);
+          const canonicalKey = buildKey('GET', path);
+          await set(canonicalKey, data);
         }
       } catch (err) {
         console.warn('Prefetch failed for:', path);
@@ -89,7 +108,7 @@ const CacheManager = (() => {
     });
   }
 
-  return { get, set, invalidate, prefetch };
+  return { get, set, invalidate, prefetch, buildKey, getCurrentUserId };
 })();
 
 if (typeof window !== 'undefined') {

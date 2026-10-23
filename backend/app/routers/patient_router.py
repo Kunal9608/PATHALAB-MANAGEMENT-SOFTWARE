@@ -118,9 +118,14 @@ def search_by_mobile(
 ):
     from backend.app.repositories import patient_repo
     from backend.app.models.user import RoleEnum, ViewScopeEnum
+    user_role = getattr(current_user.role, "value", current_user.role)
+    user_scope = getattr(current_user.view_scope, "value", current_user.view_scope)
+
     collected_by = None
-    if current_user.role == RoleEnum.staff and current_user.view_scope == ViewScopeEnum.own:
-        collected_by = current_user.id
+    if user_role != RoleEnum.admin and user_role != "admin":
+        # Any non-admin without explicit "all" scope strictly defaults to their own registered patients
+        if user_scope != ViewScopeEnum.all and user_scope != "all":
+            collected_by = current_user.id
     patients = patient_repo.search_by_mobile(db, mobile, collected_by=collected_by)
     return [patient_service._patient_to_dict(db, p) for p in patients]
 

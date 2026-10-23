@@ -32,16 +32,15 @@ def upload_report(
     image_exts = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".heif")
     allowed_extensions = (".pdf",) + image_exts
     
-    # 1. Read file bytes synchronously (slow I/O executed before checking out DB connection)
-    file_bytes = file.file.read()
-
-    # 2. Perform multi-layer security validation
-    from backend.app.core.upload_security import validate_file_upload
+    # 1. Read file bytes synchronously with strict streaming bound
+    from backend.app.core.upload_security import read_sync_file_bounded, validate_file_upload
+    max_report_size = 3 * 1024 * 1024  # 3MB limit for report uploads
     try:
+        file_bytes = read_sync_file_bounded(file.file, max_size=max_report_size)
         sanitized_filename = validate_file_upload(
             file_bytes=file_bytes,
             filename=file.filename,
-            max_size=3 * 1024 * 1024,  # 3MB limit for report uploads
+            max_size=max_report_size,
             allowed_extensions=allowed_extensions
         )
     except ValueError as e:
@@ -177,27 +176,16 @@ def download_report(report_id: uuid.UUID,
         "Content-Disposition": f"{disposition}; filename=\"{filename}\""
     }
 
-    if report.file_path.startswith("supabase:"):
-        parts = report.file_path.replace("supabase:", "").split("/", 1)
-        if len(parts) != 2:
-            raise HTTPException(status_code=500, detail="Invalid Supabase storage path")
-        bucket_name, file_path_in_bucket = parts
-        
-        if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
-            raise HTTPException(status_code=500, detail="Supabase configuration missing")
-            
-        from supabase import create_client, Client
-        supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-        try:
-            res = supabase.storage.from_(bucket_name).download(file_path_in_bucket)
-            return Response(content=res, media_type="application/pdf", headers=headers)
-        except Exception as e:
-            raise HTTPException(status_code=404, detail="Report file not found in Supabase Storage")
+    from backend.app.core.storage import download_file_bytes
+    try:
+        content_bytes = download_file_bytes(report.file_path)
+        return Response(content=content_bytes, media_type="application/pdf", headers=headers)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Report file not found")
+    except Exception as e:
+        logger.error(f"Error retrieving report file: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving report file")
 
-    if not os.path.exists(report.file_path):
-        raise HTTPException(status_code=404, detail="Report file not found on disk")
-
-    return FileResponse(report.file_path, media_type="application/pdf", headers=headers)
 
 
 @router.post("/{report_id}/log-action")
@@ -246,9 +234,13 @@ def log_report_action(
     return {"status": "ok", "action": log_action}
 
 
+from backend.app.core.limiter import limiter
+
+
 @router.get("/verify/{report_id}")
-def verify_report(report_id: uuid.UUID, h: str = None, db: Session = Depends(get_db)):
-    """Public verification endpoint — no auth required."""
+@limiter.limit("20/minute")
+def verify_report(request: Request, report_id: uuid.UUID, h: Optional[str] = Query(None, description="Verification hash token"), db: Session = Depends(get_db)):
+    """Public verification endpoint — rate limited, requires hash token."""
     return report_service.verify_report(db, report_id, h)
 
 
@@ -324,21 +316,22 @@ async def upload_test_attachment(
     patient = patient_repo.get_by_id(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    check_patient_access(current_user, patient)
+    # Verify test_id belongs to patient's booked tests
+    booked_test_ids = {pt.test_id for pt in (patient.patient_tests or [])}
+    if test_id not in booked_test_ids:
+        raise HTTPException(status_code=400, detail="Test ID is not booked for this patient.")
 
     attach_dir = Path("uploads/attachments")
     attach_dir.mkdir(parents=True, exist_ok=True)
 
-    file_bytes = await file.read()
-    if len(file_bytes) > 15 * 1024 * 1024:  # 15MB limit
-        raise HTTPException(status_code=400, detail="Attachment file size exceeds 15MB limit.")
-
-    from backend.app.core.upload_security import validate_file_upload
+    from backend.app.core.upload_security import read_upload_file_bounded, validate_file_upload
+    max_att_size = 15 * 1024 * 1024  # 15MB limit
     try:
+        file_bytes = await read_upload_file_bounded(file, max_size=max_att_size)
         sanitized_filename = validate_file_upload(
             file_bytes=file_bytes,
             filename=file.filename,
-            max_size=15 * 1024 * 1024,
+            max_size=max_att_size,
             allowed_extensions=(".pdf", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".heif")
         )
         file.filename = sanitized_filename
@@ -347,26 +340,18 @@ async def upload_test_attachment(
 
     safe_name = report_service.generate_safe_filename(file.filename, f"{patient.patient_code}_{test_id.hex[:8]}")
     
-    from backend.app.config import settings
-    if settings.STORAGE_PROVIDER.lower() == "supabase":
-        from supabase import create_client, Client
-        if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
-            raise HTTPException(status_code=500, detail="Supabase URL or Key is not configured.")
-        supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-        content_type = file.content_type or "application/octet-stream"
-        try:
-            supabase.storage.from_("reports").upload(
-                path=f"attachments/{safe_name}",
-                file=file_bytes,
-                file_options={"content-type": content_type}
-            )
-            db_file_path = f"supabase:reports/attachments/{safe_name}"
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to upload attachment to Supabase: {e}")
-    else:
-        file_path = attach_dir / safe_name
-        file_path.write_bytes(file_bytes)
-        db_file_path = str(file_path)
+    from backend.app.core.storage import upload_file_bytes
+    content_type = file.content_type or "application/octet-stream"
+    try:
+        db_file_path = upload_file_bytes(
+            file_bytes=file_bytes,
+            filename=safe_name,
+            content_type=content_type,
+            folder="attachments",
+        )
+    except Exception as e:
+        logger.error(f"Failed to upload attachment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {e}")
 
     return {
         "status": "success",
@@ -447,21 +432,11 @@ def send_report_whatsapp(
         logging.getLogger("akriti.reports").warning(f"On-the-fly letterhead PDF generation skipped/failed ({e}), falling back to stored report.")
 
     if not file_bytes:
-        if report.file_path.startswith("supabase:"):
-            parts = report.file_path.replace("supabase:", "").split("/", 1)
-            if len(parts) == 2:
-                bucket_name, file_path_in_bucket = parts
-                from supabase import create_client
-                supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-                try:
-                    file_bytes = supabase.storage.from_(bucket_name).download(file_path_in_bucket)
-                except Exception as e:
-                    raise HTTPException(status_code=404, detail=f"Report file not found in Supabase: {e}")
-        else:
-            if not os.path.exists(report.file_path):
-                raise HTTPException(status_code=404, detail="Report file not found on disk")
-            with open(report.file_path, "rb") as f:
-                file_bytes = f.read()
+        from backend.app.core.storage import download_file_bytes
+        try:
+            file_bytes = download_file_bytes(report.file_path)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Report file could not be retrieved: {e}")
 
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Unable to retrieve report document bytes")

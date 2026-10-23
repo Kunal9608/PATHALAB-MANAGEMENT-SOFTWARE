@@ -32,6 +32,16 @@ const OfflineQueue = (() => {
     });
   }
 
+  function getCurrentUserId() {
+    if (window._me && window._me.id) return String(window._me.id);
+    try {
+      const u = JSON.parse(localStorage.getItem('akriti_current_user') || '{}');
+      return u.id ? String(u.id) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function generateTempRefId() {
     const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -42,6 +52,12 @@ const OfflineQueue = (() => {
     const d = await openDB();
     const refId = tempRefId || generateTempRefId();
     payload.temp_ref_id = refId;
+    const currentUserId = getCurrentUserId();
+
+    // Ensure offline patient registrations target the durable offline endpoint
+    if ((endpoint === '/api/v1/patients' || !endpoint) && method === 'POST') {
+      endpoint = '/api/v1/offline-patients';
+    }
 
     return new Promise((resolve, reject) => {
       const tx = d.transaction(STORE, 'readwrite');
@@ -51,6 +67,7 @@ const OfflineQueue = (() => {
         payload,
         idempotencyKey,
         tempRefId: refId,
+        ownerId: currentUserId,
         status: 'PENDING',
         retryCount: 0,
         lastAttempt: null,
@@ -72,11 +89,18 @@ const OfflineQueue = (() => {
     });
   }
 
-  async function getAll() {
+  async function getAll(filterUser = false) {
     const d = await openDB();
+    const userId = getCurrentUserId();
     return new Promise((resolve, reject) => {
       const req = d.transaction(STORE, 'readonly').objectStore(STORE).getAll();
-      req.onsuccess = e => resolve(e.target.result || []);
+      req.onsuccess = e => {
+        let items = e.target.result || [];
+        if (filterUser && userId) {
+          items = items.filter(it => !it.ownerId || String(it.ownerId) === String(userId));
+        }
+        resolve(items);
+      };
       req.onerror   = e => reject(e.target.error);
     });
   }
@@ -172,7 +196,7 @@ const OfflineQueue = (() => {
     const online = await isOnline();
     if (!online) return;
 
-    const items = await getAll();
+    const items = await getAll(false);
     if (!items.length) {
       if (onlineBanner && onlineBanner.classList.contains('show')) {
         updateBanner('success');
@@ -190,6 +214,17 @@ const OfflineQueue = (() => {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+      // Do not re-hammer permanent validation/conflict failures more than once every 30 seconds
+      if (item.status === 'FAILED' && item.lastAttempt && (Date.now() - item.lastAttempt < 30000)) {
+        failed++;
+        continue;
+      }
+
+      let targetEndpoint = item.endpoint;
+      if ((targetEndpoint === '/api/v1/patients' || !targetEndpoint) && item.method === 'POST') {
+        targetEndpoint = '/api/v1/offline-patients';
+      }
+
       const progressMsg = `🔄 Syncing changes (${i + 1}/${items.length})...`;
       updateBanner('syncing', items.length - i, progressMsg);
       broadcastState('syncing', items.length - i, progressMsg);
@@ -203,7 +238,7 @@ const OfflineQueue = (() => {
           headers['X-Temp-Ref-ID'] = item.tempRefId;
         }
 
-        const res = await fetch(item.endpoint, {
+        const res = await fetch(targetEndpoint, {
           method: item.method,
           credentials: 'include',
           headers,
@@ -226,10 +261,16 @@ const OfflineQueue = (() => {
         } else if (res.status === 409) {
           const errData = await res.json().catch(() => ({}));
           const existingPatient = (errData.detail && typeof errData.detail === 'object') ? errData.detail.existing_patient : null;
-          
+          item.status = existingPatient ? 'CONFLICT' : 'FAILED';
+          item.existingPatient = existingPatient;
+          item.failureReason = (typeof errData.detail === 'string' ? errData.detail : (errData.detail?.message || 'Duplicate patient detected'));
+          item.retryCount = (item.retryCount || 0) + 1;
+          item.lastAttempt = Date.now();
+          await updateItem(item);
+          failed++;
+
           if (existingPatient) {
-            syncInProgress = false; // Pause sync
-            updateBanner('conflict', items.length - i, "⚠️ Sync paused — Duplicate detected.");
+            updateBanner('conflict', items.length - i, "⚠️ Sync issue — Duplicate detected.");
             if (channel) {
               channel.postMessage({
                 state: 'conflict',
@@ -242,14 +283,6 @@ const OfflineQueue = (() => {
                 detail: { itemId: item.id, payload: item.payload, existingPatient } 
               }));
             }
-            return; // Exit flush loop to wait for resolution
-          } else {
-            item.status = 'FAILED';
-            item.failureReason = 'Duplicate patient detected';
-            item.retryCount = (item.retryCount || 0) + 1;
-            item.lastAttempt = Date.now();
-            await updateItem(item);
-            failed++;
           }
         } else {
           const errData = await res.json().catch(() => ({}));
@@ -286,27 +319,118 @@ const OfflineQueue = (() => {
     }
   }
 
-  async function resolveConflict(itemId, resolution) {
-    const items = await getAll();
+  async function syncSingleItem(item) {
+    try {
+      let targetEndpoint = item.endpoint;
+      if ((targetEndpoint === '/api/v1/patients' || !targetEndpoint) && item.method === 'POST') {
+        targetEndpoint = '/api/v1/offline-patients';
+      }
+      const headers = {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': item.idempotencyKey,
+      };
+      if (item.tempRefId) {
+        headers['X-Temp-Ref-ID'] = item.tempRefId;
+      }
+
+      const res = await fetch(targetEndpoint, {
+        method: item.method,
+        credentials: 'include',
+        headers,
+        body: JSON.stringify(item.payload),
+      });
+
+      if (res.ok) {
+        const resData = await res.json().catch(() => ({}));
+        if (resData && resData.status === 'FAILED') {
+          item.status = 'FAILED';
+          item.failureReason = resData.failure_reason || 'Synchronization rejected';
+          item.retryCount = (item.retryCount || 0) + 1;
+          item.lastAttempt = Date.now();
+          await updateItem(item);
+          return { success: false, status: 'FAILED', reason: item.failureReason };
+        } else {
+          await remove(item.id);
+          return {
+            success: true,
+            status: 'SUCCESS',
+            patient_code: resData.patient_code || resData.permanent_patient_code,
+            patient_id: resData.id || resData.patient_id,
+          };
+        }
+      } else if (res.status === 409) {
+        const errData = await res.json().catch(() => ({}));
+        const existingPatient = (errData.detail && typeof errData.detail === 'object') ? errData.detail.existing_patient : null;
+        item.status = existingPatient ? 'CONFLICT' : 'FAILED';
+        item.existingPatient = existingPatient;
+        item.failureReason = (typeof errData.detail === 'string' ? errData.detail : (errData.detail?.message || 'Duplicate patient detected'));
+        item.retryCount = (item.retryCount || 0) + 1;
+        item.lastAttempt = Date.now();
+        await updateItem(item);
+        return { success: false, status: item.status, existingPatient, reason: item.failureReason };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        item.status = 'FAILED';
+        item.failureReason = (typeof errData.detail === 'string' ? errData.detail : (errData.detail?.message || 'Server rejected registration'));
+        item.retryCount = (item.retryCount || 0) + 1;
+        item.lastAttempt = Date.now();
+        await updateItem(item);
+        return { success: false, status: 'FAILED', reason: item.failureReason };
+      }
+    } catch (networkErr) {
+      item.status = 'FAILED';
+      item.failureReason = 'Network or backend unavailable';
+      item.retryCount = (item.retryCount || 0) + 1;
+      item.lastAttempt = Date.now();
+      await updateItem(item).catch(() => {});
+      return { success: false, status: 'FAILED', reason: item.failureReason };
+    }
+  }
+
+  async function retryItem(itemId) {
+    const items = await getAll(false);
     const item = items.find(i => i.id === itemId);
     if (!item) {
-        flush();
-        return;
+      return { success: false, reason: 'Record not found in local offline storage.' };
     }
-    
+    return await syncSingleItem(item);
+  }
+
+  async function retryAll() {
+    const items = await getAll(false);
+    const failedItems = items.filter(i => i.status === 'FAILED' || i.status === 'PENDING' || i.status === 'CONFLICT');
+    let succeeded = 0;
+    let failed = 0;
+    const results = [];
+
+    for (const item of failedItems) {
+      const res = await syncSingleItem(item);
+      results.push({ item, res });
+      if (res.success) succeeded++;
+      else failed++;
+    }
+
+    return { succeeded, failed, total: failedItems.length, results };
+  }
+
+  async function resolveConflict(itemId, resolution) {
+    const items = await getAll(false);
+    const item = items.find(i => i.id === itemId);
+    if (!item) {
+      flush();
+      return;
+    }
+
     if (resolution === 'discard') {
-        await remove(itemId);
+      await remove(itemId);
     } else if (resolution === 'force') {
-        item.payload.force_duplicate = true;
-        const d = await openDB();
-        await new Promise((resolve, reject) => {
-            const tx = d.transaction(STORE, 'readwrite');
-            const req = tx.objectStore(STORE).put(item);
-            tx.oncomplete = resolve;
-            tx.onerror = e => reject(e.target.error);
-        });
+      item.payload.force_duplicate = true;
+      item.idempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('idem-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+      item.status = 'PENDING';
+      await updateItem(item);
+      await syncSingleItem(item);
     }
-    
+
     flush();
   }
 
@@ -335,13 +459,20 @@ const OfflineQueue = (() => {
     setInterval(check, 30_000);
   }
 
+  function stop() {
+    syncInProgress = false;
+    if (onlineBanner) {
+      onlineBanner.classList.remove('show');
+    }
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
 
-  return { enqueue, flush, getAll, isOnline, resolveConflict };
+  return { enqueue, flush, getAll, isOnline, resolveConflict, remove, retryItem, retryAll, stop };
 })();
 
 window.OfflineQueue = OfflineQueue;

@@ -12,7 +12,11 @@ if redis_enabled and redis_url and not (os.getenv("RENDER") and redis_url in ("r
         kwargs = {"socket_connect_timeout": 1.5}
         if redis_url.startswith("rediss://"):
             import ssl
-            kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+            verify_ssl = os.getenv("REDIS_SSL_VERIFY", "true").lower() in ("true", "1", "yes")
+            kwargs["ssl_cert_reqs"] = ssl.CERT_REQUIRED if verify_ssl else ssl.CERT_NONE
+            ca_certs = os.getenv("REDIS_SSL_CA_CERTS")
+            if ca_certs and os.path.exists(ca_certs):
+                kwargs["ssl_ca_certs"] = ca_certs
         r = redis.from_url(redis_url, **kwargs)
         r.ping()
         use_redis = True

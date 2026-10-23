@@ -88,7 +88,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             )
 
     # 3. Structured JSON for API routes and non-HTML requests
-    detail_msg = exc.detail if isinstance(exc.detail, str) else str(exc.detail or "An error occurred")
     code_map = {
         400: "BAD_REQUEST",
         401: "UNAUTHORIZED",
@@ -102,6 +101,28 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         503: "SERVICE_UNAVAILABLE",
         504: "GATEWAY_TIMEOUT",
     }
+
+    if isinstance(exc.detail, dict):
+        structured_detail = _json_safe(exc.detail)
+        error_code = structured_detail.get("code") or code_map.get(status_code, f"HTTP_{status_code}")
+        detail_msg = structured_detail.get("message") or str(structured_detail)
+        logger.warning(f"HTTP {status_code} [{error_code}] on {request.method} {request.url}: {detail_msg} (req_id: {req_id})")
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "success": False,
+                "detail": structured_detail,
+                "message": detail_msg,
+                "error": {
+                    "code": error_code,
+                    "message": detail_msg,
+                    "details": structured_detail,
+                    "request_id": req_id
+                }
+            }
+        )
+
+    detail_msg = exc.detail if isinstance(exc.detail, str) else str(exc.detail or "An error occurred")
     error_code = code_map.get(status_code, f"HTTP_{status_code}")
 
     logger.warning(f"HTTP {status_code} [{error_code}] on {request.method} {request.url}: {detail_msg} (req_id: {req_id})")

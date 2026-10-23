@@ -608,9 +608,9 @@
       { key: 'created_at',   label: 'Date',          width: '110px', render: v => formatDate(v) },
       { key: null,           label: 'Actions',       width: '210px', render: (_, row) => `
         <div class="action-btns" style="display:flex;gap:4px">
-          <button class="btn btn-sm btn-ghost" onclick="openPanel('${row.id}','${escapeHtml(row.name)}','${escapeHtml(row.patient_code)}')">View</button>
-          <button class="btn btn-sm btn-secondary" onclick="openReportModal('${row.id}','${escapeHtml(row.patient_code)}','${row.status}')" title="Manual Upload / Edit Report">Upload</button>
-          <button class="btn btn-sm btn-primary" onclick="openDataEntryModal('${row.id}','${escapeHtml(row.patient_code)}','${escapeHtml(row.name)}')" title="Enter Results & Auto-Generate">Results</button>
+          <button class="btn btn-sm btn-ghost action-view-btn" data-id="${escapeHtml(row.id)}" data-name="${escapeHtml(row.name)}" data-code="${escapeHtml(row.patient_code)}">View</button>
+          <button class="btn btn-sm btn-secondary action-upload-btn" data-id="${escapeHtml(row.id)}" data-code="${escapeHtml(row.patient_code)}" data-status="${escapeHtml(row.status)}" title="Manual Upload / Edit Report">Upload</button>
+          <button class="btn btn-sm btn-primary action-results-btn" data-id="${escapeHtml(row.id)}" data-code="${escapeHtml(row.patient_code)}" data-name="${escapeHtml(row.name)}" title="Enter Results & Auto-Generate">Results</button>
         </div>
       ` },
     ],
@@ -628,6 +628,24 @@
     emptyMessage: 'No patients found matching your filters',
   });
   table.load();
+
+  document.getElementById('patients-table-container')?.addEventListener('click', (e) => {
+    const viewBtn = e.target.closest('.action-view-btn');
+    if (viewBtn) {
+      openPanel(viewBtn.dataset.id, viewBtn.dataset.name, viewBtn.dataset.code);
+      return;
+    }
+    const uploadBtn = e.target.closest('.action-upload-btn');
+    if (uploadBtn) {
+      openReportModal(uploadBtn.dataset.id, uploadBtn.dataset.code, uploadBtn.dataset.status);
+      return;
+    }
+    const resultsBtn = e.target.closest('.action-results-btn');
+    if (resultsBtn) {
+      openDataEntryModal(resultsBtn.dataset.id, resultsBtn.dataset.code, resultsBtn.dataset.name);
+      return;
+    }
+  });
 
   window.addEventListener('cache-updated:/api/v1/patients', () => {
     table.load({}, { silent: true });
@@ -709,15 +727,15 @@
                     </div>
                   </div>
                   <div class="report-card-actions">
-                    <button type="button" onclick="handleViewReportClick('${r.id}', '${id}', '${escapeHtml(p.patient_code)}', '${escapeHtml(p.name)}')" class="btn btn-sm btn-secondary report-btn" title="View PDF">
+                    <button type="button" class="btn btn-sm btn-secondary report-btn btn-view-report" data-report-id="${escapeHtml(r.id)}" data-patient-id="${escapeHtml(id)}" data-code="${escapeHtml(p.patient_code)}" data-name="${escapeHtml(p.name)}" title="View PDF">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                       View
                     </button>
-                    <button type="button" onclick="handleDownloadReportClick('${r.id}', '${id}', '${escapeHtml(p.patient_code)}', '${escapeHtml(p.name)}')" class="btn btn-sm btn-primary report-btn" title="Download PDF">
+                    <button type="button" class="btn btn-sm btn-primary report-btn btn-download-report" data-report-id="${escapeHtml(r.id)}" data-patient-id="${escapeHtml(id)}" data-code="${escapeHtml(p.patient_code)}" data-name="${escapeHtml(p.name)}" title="Download PDF">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       Download
                     </button>
-                    <button type="button" onclick="handleSendReportWhatsapp('${r.id}', '${id}', '${escapeHtml(p.mobile || '')}', '${escapeHtml(p.patient_code)}', '${escapeHtml(p.name)}')" class="btn btn-sm report-btn btn-whatsapp" title="Send Report PDF to Patient on WhatsApp">
+                    <button type="button" class="btn btn-sm report-btn btn-whatsapp btn-whatsapp-report" data-report-id="${escapeHtml(r.id)}" data-patient-id="${escapeHtml(id)}" data-mobile="${escapeHtml(p.mobile || '')}" data-code="${escapeHtml(p.patient_code)}" data-name="${escapeHtml(p.name)}" title="Send Report PDF to Patient on WhatsApp">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                       WhatsApp
                     </button>
@@ -873,15 +891,15 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </a>
-          <button class="btn btn-secondary" style="flex:1" onclick="openStatusModal('${p.id}','${p.status}')">
+          <button class="btn btn-secondary panel-status-btn" style="flex:1" data-id="${escapeHtml(p.id)}" data-status="${escapeHtml(p.status)}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             Status
           </button>
-          <button class="btn btn-secondary" style="flex:1" onclick="openReportModal('${p.id}','${escapeHtml(p.patient_code)}','${p.status}')">
+          <button class="btn btn-secondary panel-upload-btn" style="flex:1" data-id="${escapeHtml(p.id)}" data-code="${escapeHtml(p.patient_code)}" data-status="${escapeHtml(p.status)}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Upload
           </button>
-          <button class="btn btn-primary" style="flex:1.2" onclick="openDataEntryModal('${p.id}','${escapeHtml(p.patient_code)}','${escapeHtml(p.name)}')">
+          <button class="btn btn-primary panel-results-btn" style="flex:1.2" data-id="${escapeHtml(p.id)}" data-code="${escapeHtml(p.patient_code)}" data-name="${escapeHtml(p.name)}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
             Enter Results
           </button>
@@ -898,6 +916,39 @@
   }
   document.getElementById('panel-close-btn').addEventListener('click', closePanel);
   document.getElementById('panel-overlay').addEventListener('click', closePanel);
+
+  document.getElementById('panel-body')?.addEventListener('click', (e) => {
+    const viewReportBtn = e.target.closest('.btn-view-report');
+    if (viewReportBtn) {
+      handleViewReportClick(viewReportBtn.dataset.reportId, viewReportBtn.dataset.patientId, viewReportBtn.dataset.code, viewReportBtn.dataset.name);
+      return;
+    }
+    const downloadReportBtn = e.target.closest('.btn-download-report');
+    if (downloadReportBtn) {
+      handleDownloadReportClick(downloadReportBtn.dataset.reportId, downloadReportBtn.dataset.patientId, downloadReportBtn.dataset.code, downloadReportBtn.dataset.name);
+      return;
+    }
+    const whatsappBtn = e.target.closest('.btn-whatsapp-report');
+    if (whatsappBtn) {
+      handleSendReportWhatsapp(whatsappBtn.dataset.reportId, whatsappBtn.dataset.patientId, whatsappBtn.dataset.mobile, whatsappBtn.dataset.code, whatsappBtn.dataset.name);
+      return;
+    }
+    const statusBtn = e.target.closest('.panel-status-btn');
+    if (statusBtn) {
+      openStatusModal(statusBtn.dataset.id, statusBtn.dataset.status);
+      return;
+    }
+    const uploadBtn = e.target.closest('.panel-upload-btn');
+    if (uploadBtn) {
+      openReportModal(uploadBtn.dataset.id, uploadBtn.dataset.code, uploadBtn.dataset.status);
+      return;
+    }
+    const resultsBtn = e.target.closest('.panel-results-btn');
+    if (resultsBtn) {
+      openDataEntryModal(resultsBtn.dataset.id, resultsBtn.dataset.code, resultsBtn.dataset.name);
+      return;
+    }
+  });
 
   // ── Payment Collection & Due Protection Modal ──────────────────────────────
   window.openPaymentCollectModal = function(patientId, dueAmount, netPayable, code, name, onSuccess, onSkip) {

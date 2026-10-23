@@ -78,17 +78,16 @@ async def face_enroll(staff_id: str, image: UploadFile = File(...),
             detail="You are not authorized to enroll face data for this staff member"
         )
     
-    # Read file bytes
-    image_bytes = await image.read()
-
-    # Perform multi-layer image validation
-    from backend.app.core.upload_security import validate_file_upload
+    # Stream read with strict maximum limit to prevent memory exhaustion
+    from backend.app.core.upload_security import read_upload_file_bounded, validate_file_upload
     allowed_image_exts = (".jpg", ".jpeg", ".png", ".webp")
+    max_enroll_size = 10 * 1024 * 1024  # 10MB
     try:
+        image_bytes = await read_upload_file_bounded(image, max_size=max_enroll_size)
         validate_file_upload(
             file_bytes=image_bytes,
             filename=image.filename,
-            max_size=10 * 1024 * 1024,  # 10MB
+            max_size=max_enroll_size,
             allowed_extensions=allowed_image_exts
         )
     except ValueError as e:

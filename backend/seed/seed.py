@@ -121,7 +121,16 @@ def seed():
             db.add(admin)
             db.flush()
             print(f"  [OK] Admin account created: {admin_email}")
-            print(f"       Temporary random password seeded: {temp_pwd}")
+            if settings.is_production:
+                print("  [SECURITY] Temporary admin password provisioned. Check deployment bootstrap channel; must reset on first login.")
+            else:
+                # In development, write to local private file to avoid terminal capture
+                try:
+                    with open(".admin_bootstrap_token", "w") as f:
+                        f.write(f"{admin_email}:{temp_pwd}\n")
+                    print("  [INFO] Temporary bootstrap credentials saved to local .admin_bootstrap_token (non-production only).")
+                except Exception:
+                    print("  [INFO] Temporary admin password provisioned.")
         else:
             # Do NOT reset or overwrite password on restart if admin already exists
             existing_admin.email = admin_email

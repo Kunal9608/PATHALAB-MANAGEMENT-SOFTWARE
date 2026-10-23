@@ -37,7 +37,11 @@ def _check_duplicates(db: Session, mobile: str, sample_date: date, test_ids: Lis
             }
             raise HTTPException(
                 status_code=409,
-                detail={"message": "Possible duplicate patient detected.", "existing_patient": existing_info}
+                detail={
+                    "code": "DUPLICATE_PATIENT",
+                    "message": f"Patient with mobile {mobile} was already registered recently as {recent_patient.name}.",
+                    "existing_patient": existing_info
+                }
             )
 
     # 2. Existing check: same day, same tests
@@ -66,10 +70,6 @@ def _check_duplicates(db: Session, mobile: str, sample_date: date, test_ids: Lis
 def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UUID,
                    background_tasks, idempotency_key: Optional[str] = None) -> dict:
     """FR-4.1, FR-4.2 — Create patient with sequence-based ID generation."""
-    year = date.today().year
-
-    # Generate Patient ID using PostgreSQL sequence (never MAX+1)
-    patient_code = patient_repo.generate_patient_code(db, year)
 
     # Server-recompute total from current test prices — never trust client total
     price_map = test_repo.get_current_prices(db, payload.test_ids)
@@ -110,6 +110,10 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
         if doc:
             commission_pct = Decimal(str(doc.commission_pct))
             commission_amount = round(effective_total * (commission_pct / Decimal(100)), 2)
+
+    # Generate sequential Patient ID ONLY after all validations pass, right before DB insertion
+    year = date.today().year
+    patient_code = patient_repo.generate_patient_code(db, year)
 
     patient = patient_repo.create_patient(
         db,

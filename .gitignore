@@ -201,3 +201,7 @@ WHATSAPP/service/session/
 
 # Scratch test directory
 scratch/
+
+# Agent configuration & IDE skills
+.agents/
+.gemini/

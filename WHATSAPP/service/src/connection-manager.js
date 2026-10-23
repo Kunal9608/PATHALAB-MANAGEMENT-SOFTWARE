@@ -134,12 +134,13 @@ class ConnectionManager {
             this.qrGeneratedAt = new Date().toISOString();
             this.qrExpiresAt = Date.now() + 60000; // QR valid for 60 seconds
             this.status = 'qr_ready';
-            console.log('\n[WhatsApp] >>> NEW QR CODE READY <<<');
-            try {
-              const terminalQR = await QRCode.toString(qr, { type: 'terminal', small: true });
-              console.log(terminalQR);
-            } catch (tErr) {}
-            console.log('[WhatsApp] You can also view/scan the QR in Admin Settings: http://localhost:8000/admin/settings.html\n');
+            console.log('[WhatsApp] New QR code generated. Available securely in Admin Settings UI.');
+            if (process.env.NODE_ENV !== 'production') {
+              try {
+                const terminalQR = await QRCode.toString(qr, { type: 'terminal', small: true });
+                console.log(terminalQR);
+              } catch (tErr) {}
+            }
           } catch (err) {
             console.error('[WhatsApp] QR DataURL generation failed:', err.message);
           }

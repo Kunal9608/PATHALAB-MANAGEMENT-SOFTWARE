@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.models.report import Report
-from backend.app.models.patient import PatientStatusEnum
+from backend.app.models.patient import Patient, PatientStatusEnum
 from backend.app.repositories import patient_repo
 from backend.app.services import audit_service, notification_service
 
@@ -31,7 +31,8 @@ def upload_report(db: Session, patient_id: uuid.UUID, file_bytes: bytes,
                   reason: Optional[str] = None, force: bool = False, source: str = "manual",
                   partial_release: bool = False) -> dict:
     """FR-7.1 — Upload report PDF, compute hash, update patient status."""
-    patient = patient_repo.get_by_id(db, patient_id)
+    # Acquire row-level lock on patient to serialize concurrent report uploads and avoid race in version allocation
+    patient = db.query(Patient).filter(Patient.id == patient_id).with_for_update().first()
     if not patient:
         raise ValueError("Patient not found")
 
@@ -55,65 +56,55 @@ def upload_report(db: Session, patient_id: uuid.UUID, file_bytes: bytes,
     version = db.query(Report).filter(Report.patient_id == patient_id).count() + 1
 
     safe_filename = generate_safe_filename(filename, f"{patient.patient_code}_v{version}")
-    
-    from backend.app.config import settings
-    if settings.STORAGE_PROVIDER.lower() == "supabase":
-        if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
-            raise ValueError("Supabase URL or Key is not configured in .env")
-        try:
-            from supabase import create_client, Client
-            supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            res = supabase.storage.from_("reports").upload(
-                path=safe_filename,
-                file=file_bytes,
-                file_options={"content-type": "application/pdf"}
-            )
-            db_file_path = f"supabase:reports/{safe_filename}"
-        except Exception as e:
-            import logging
-            logging.getLogger("akriti.reports").error(f"Failed to upload to Supabase: {e}")
-            raise ValueError(f"Storage Error: Failed to upload file to Supabase. Ensure bucket 'reports' exists. Detail: {e}")
-    else:
-        file_path = REPORTS_DIR / safe_filename
-        file_path.write_bytes(file_bytes)
-        try:
-            os.chmod(file_path, 0o644) # Read/write for owner, read-only for others (non-executable)
-        except Exception:
-            pass
-        db_file_path = str(file_path)
 
-    report = Report(
-        patient_id=patient_id,
-        file_path=db_file_path,
-        original_filename=filename,
-        signed=False,
-        verification_hash=verification_hash,
-        version=version,
-        source=source,
-        uploaded_by=uploader_id,
-        is_latest=True,
-    )
-    db.add(report)
-    db.flush()
+    from backend.app.core.storage import upload_file_bytes, delete_file_object
+    db_file_path = None
+    try:
+        db_file_path = upload_file_bytes(
+            file_bytes=file_bytes,
+            filename=safe_filename,
+            content_type="application/pdf",
+            folder="reports"
+        )
 
-    # Update patient status
-    target_status = PatientStatusEnum.partial_release if partial_release else PatientStatusEnum.report_ready
-    patient_repo.update_patient(db, patient_id, status=target_status)
+        report = Report(
+            patient_id=patient_id,
+            file_path=db_file_path,
+            original_filename=filename,
+            signed=False,
+            verification_hash=verification_hash,
+            version=version,
+            source=source,
+            uploaded_by=uploader_id,
+            is_latest=True,
+        )
+        db.add(report)
+        db.flush()
 
-    # Log report upload in patient status history
-    from backend.app.models.patient_status_history import PatientStatusHistory
-    history = PatientStatusHistory(
-        patient_id=patient_id,
-        status=target_status.value if hasattr(target_status, 'value') else str(target_status),
-        updated_by=uploader_id,
-        extra_info={"version": version, "filename": filename, "reason": reason}
-    )
-    db.add(history)
+        # Update patient status
+        target_status = PatientStatusEnum.partial_release if partial_release else PatientStatusEnum.report_ready
+        patient_repo.update_patient(db, patient_id, status=target_status)
 
-    audit_service.log(db, "report.upload", actor_user_id=uploader_id,
-                      entity_type="report", entity_id=report.id,
-                      after={"patient_code": patient.patient_code, "version": version})
-    db.commit()
+        # Log report upload in patient status history
+        from backend.app.models.patient_status_history import PatientStatusHistory
+        history = PatientStatusHistory(
+            patient_id=patient_id,
+            status=target_status.value if hasattr(target_status, 'value') else str(target_status),
+            updated_by=uploader_id,
+            extra_info={"version": version, "filename": filename, "reason": reason}
+        )
+        db.add(history)
+
+        audit_service.log(db, "report.upload", actor_user_id=uploader_id,
+                          entity_type="report", entity_id=report.id,
+                          after={"patient_code": patient.patient_code, "version": version})
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        # Compensating cleanup: remove uploaded object/file on DB failure
+        if db_file_path:
+            delete_file_object(db_file_path)
+        raise exc
     try:
         from backend.app.core import copilot_cache
         copilot_cache.invalidate_patient_sync(str(patient.patient_code))
@@ -178,20 +169,34 @@ def get_patient_reports(db: Session, patient_id: uuid.UUID) -> list:
 
 
 def verify_report(db: Session, report_id: uuid.UUID, short_hash: Optional[str] = None) -> dict:
-    """Public verification endpoint — FR-7.1."""
+    """Public verification endpoint — requires exact full hash or high-entropy verification token."""
+    import hmac
+    if not short_hash or len(short_hash.strip()) < 16:
+        return {
+            "verified": False,
+            "message": "Verification requires a valid 16+ character hash token"
+        }
+
+    clean_token = short_hash.strip().lower()
     report = db.query(Report).filter(Report.id == report_id).first()
-    if not report:
-        return {"verified": False, "message": "Report not found"}
+    if not report or not report.verification_hash:
+        return {"verified": False, "message": "Report record or verification hash not found"}
 
-    if short_hash and not report.verification_hash.startswith(short_hash):
-        return {"verified": False, "message": "Hash mismatch — document may have been altered"}
+    expected_hash = report.verification_hash.lower()
+    matches = False
+    if len(clean_token) == len(expected_hash):
+        matches = hmac.compare_digest(clean_token, expected_hash)
+    elif len(clean_token) >= 32 and expected_hash.startswith(clean_token):
+        matches = hmac.compare_digest(clean_token, expected_hash[:len(clean_token)])
 
-    patient = patient_repo.get_by_id(db, report.patient_id)
+    if not matches:
+        return {"verified": False, "message": "Invalid verification token — authenticity cannot be confirmed"}
+
     return {
         "verified": True,
-        "patient_code": patient.patient_code if patient else "Unknown",
+        "report_version": report.version,
         "issued_on": report.uploaded_at.strftime("%d %B %Y") if report.uploaded_at else "Unknown",
-        "message": "Verified authentic — issued by Akriti Diagnostics Center",
+        "message": "Verified authentic — officially issued by Akriti Diagnostics Center",
     }
 
 

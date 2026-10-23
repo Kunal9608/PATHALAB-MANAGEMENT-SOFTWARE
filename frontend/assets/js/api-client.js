@@ -40,6 +40,9 @@ const API = (() => {
   async function clearLocalAuthState({ skipLogoutCall = false } = {}) {
     localStorage.removeItem('akriti_current_user');
     localStorage.removeItem('akriti_tests_cache');
+    if (window.OfflineQueue && typeof window.OfflineQueue.stop === 'function') {
+      try { window.OfflineQueue.stop(); } catch (_) {}
+    }
     if (window.CacheManager) {
       try {
         await window.CacheManager.invalidate('.*');
@@ -224,7 +227,9 @@ const API = (() => {
   async function request(method, path, body = null, options = {}) {
     const mutating = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method.toUpperCase());
     const endpointKey = `${method.toUpperCase()}:${path}`;
-    const requestKey = `${endpointKey}:${body ? JSON.stringify(body) : ''}`;
+    const requestKey = window.CacheManager && typeof window.CacheManager.buildKey === 'function'
+      ? window.CacheManager.buildKey(method, path, body)
+      : `${endpointKey}:${body ? JSON.stringify(body) : ''}`;
     
     const failState = failureCounters.get(endpointKey);
     if (failState && failState.resetAt > Date.now()) {

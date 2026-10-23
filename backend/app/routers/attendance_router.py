@@ -25,17 +25,17 @@ async def recognize_and_checkin(
     """FR-3.1 — Submit camera frame for face recognition + auto check-in/out."""
     from fastapi import HTTPException
     
-    # Read file bytes
-    image_bytes = await image.read()
-
-    # Perform multi-layer image validation
-    from backend.app.core.upload_security import validate_file_upload
+    from backend.app.core.upload_security import read_upload_file_bounded, validate_file_upload
     allowed_image_exts = (".jpg", ".jpeg", ".png", ".webp")
+    max_kiosk_size = 10 * 1024 * 1024  # 10MB
+
+    # Stream read with strict maximum limit to prevent memory exhaustion
     try:
+        image_bytes = await read_upload_file_bounded(image, max_size=max_kiosk_size)
         validate_file_upload(
             file_bytes=image_bytes,
             filename=image.filename,
-            max_size=10 * 1024 * 1024,  # 10MB
+            max_size=max_kiosk_size,
             allowed_extensions=allowed_image_exts
         )
     except ValueError as e:

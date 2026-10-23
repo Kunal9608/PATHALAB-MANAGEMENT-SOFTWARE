@@ -143,10 +143,16 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             User Isolated
           </span>
-          <button class="btn btn-sm btn-secondary" id="refresh-btn" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            Refresh
-          </button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-primary" id="retry-all-btn" style="box-shadow:0 2px 6px rgba(0,0,0,0.2)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Retry All
+            </button>
+            <button class="btn btn-sm btn-secondary" id="refresh-btn" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
@@ -171,7 +177,9 @@
 
 <script src="/assets/js/api-client.js"></script>
 <script src="/assets/js/toast.js"></script>
+<script src="/assets/js/modal.js"></script>
 <script src="/assets/js/shell.js"></script>
+<script src="/assets/js/offline-queue.js"></script>
 <script>
   let failedRecords = [];
   let isLoading = false;
@@ -181,6 +189,7 @@
     Shell.init({ role: 'staff', activeHref: '/staff/failed-patients' });
 
     document.getElementById('refresh-btn')?.addEventListener('click', loadFailedPatients);
+    document.getElementById('retry-all-btn')?.addEventListener('click', retryAllFailed);
     document.getElementById('search-input')?.addEventListener('input', (e) => {
       clearTimeout(searchDebounce);
       searchDebounce = setTimeout(() => {
@@ -191,14 +200,71 @@
     await loadFailedPatients();
   });
 
+  function formatDateTime(isoStr) {
+    if (!isoStr) return '—';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+             d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    } catch (_) {
+      return isoStr;
+    }
+  }
+
   async function loadFailedPatients() {
     if (isLoading) return;
     isLoading = true;
     renderLoading();
 
     try {
-      const res = await API.get('/api/v1/offline-patients/failed?page_size=100');
-      failedRecords = res.items || [];
+      // 1. Fetch server-side failed records
+      const serverRes = await API.get('/api/v1/offline-patients/failed?page_size=100').catch(() => ({ items: [] }));
+      const serverItems = (serverRes.items || []).map(r => ({
+        ...r,
+        isLocal: false,
+      }));
+
+      // 2. Fetch client-side local offline queue failed/conflict records
+      let localItems = [];
+      if (typeof OfflineQueue !== 'undefined') {
+        const localAll = await OfflineQueue.getAll(false).catch(() => []);
+        localItems = localAll
+          .filter(it => it.status === 'FAILED' || it.status === 'CONFLICT' || (it.retryCount && it.retryCount > 0))
+          .map(it => {
+            const p = it.payload || {};
+            return {
+              id: 'local-' + it.id,
+              localId: it.id,
+              temp_ref_id: it.tempRefId || p.temp_ref_id || ('TMP-' + it.id),
+              patient_name: p.name || 'Offline Draft',
+              mobile: p.mobile || '',
+              age: p.age,
+              gender: p.gender,
+              created_at: new Date(it.timestamp).toISOString(),
+              last_attempt_at: it.lastAttempt ? new Date(it.lastAttempt).toISOString() : null,
+              failure_reason: it.failureReason || 'Failed to synchronize',
+              retry_count: it.retryCount || 0,
+              status: it.status || 'FAILED',
+              existingPatient: it.existingPatient || null,
+              payload: p,
+              isLocal: true,
+            };
+          });
+      }
+
+      // 3. Merge: prefer server record if both have identical temp_ref_id
+      const mergedMap = new Map();
+      for (const s of serverItems) {
+        mergedMap.set(s.temp_ref_id || s.id, s);
+      }
+      for (const l of localItems) {
+        const key = l.temp_ref_id;
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, l);
+        }
+      }
+
+      failedRecords = Array.from(mergedMap.values());
       renderTable(document.getElementById('search-input')?.value || '');
     } catch (err) {
       renderError(err.message || 'Failed to load failed registrations.');
@@ -272,7 +338,7 @@
             <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Temp Ref ID</th>
             <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Patient</th>
             <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Created</th>
-            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Failure Reason</th>
+            <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Status & Reason</th>
             <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted)">Last Attempt</th>
             <th style="padding:12px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--color-ink-muted);text-align:right">Action</th>
           </tr>
@@ -282,7 +348,12 @@
             <tr id="row-${r.id}" style="border-bottom:1px solid var(--color-border);transition:background 0.15s">
               <td style="padding:14px 16px;vertical-align:top">
                 <span class="temp-ref-badge">${escapeHtml(r.temp_ref_id)}</span>
-                ${r.permanent_patient_code ? `<div style="margin-top:4px"><span class="badge badge-success" style="font-size:10px">ID: ${escapeHtml(r.permanent_patient_code)}</span></div>` : ''}
+                <div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap">
+                  <span class="badge ${r.isLocal ? 'badge-neutral' : 'badge-primary'}" style="font-size:10px">
+                    ${r.isLocal ? 'Local Offline Store' : 'Server Cached'}
+                  </span>
+                  ${r.permanent_patient_code ? `<span class="badge badge-success" style="font-size:10px">ID: ${escapeHtml(r.permanent_patient_code)}</span>` : '<span class="badge badge-warning" style="font-size:10px">Temp ID (Pending Backup)</span>'}
+                </div>
               </td>
               <td style="padding:14px 16px;vertical-align:top">
                 <div style="font-weight:700;color:var(--color-ink);font-size:13px">${escapeHtml(r.patient_name)}</div>
@@ -296,8 +367,8 @@
                 ${formatDateTime(r.created_at)}
               </td>
               <td style="padding:14px 16px;vertical-align:top">
-                <div class="reason-box" id="reason-${r.id}">
-                  ${escapeHtml(r.failure_reason || 'Unknown synchronization error')}
+                <div class="reason-box" id="reason-${r.id}" style="${r.status === 'CONFLICT' ? 'border-left-color:#f59e0b;color:#d97706;background:rgba(245,158,11,0.08)' : ''}">
+                  <strong>${r.status === 'CONFLICT' ? '⚠️ Conflict: ' : ''}</strong>${escapeHtml(r.failure_reason || 'Unknown synchronization error')}
                 </div>
                 <div class="retry-counter" id="retries-${r.id}">
                   Attempted: ${r.retry_count || 0} time${(r.retry_count === 1) ? '' : 's'}
@@ -307,15 +378,34 @@
                 ${r.last_attempt_at ? formatDateTime(r.last_attempt_at) : '—'}
               </td>
               <td style="padding:14px 16px;vertical-align:top;text-align:right;white-space:nowrap">
-                <button
-                  class="btn btn-sm btn-primary retry-btn"
-                  id="btn-retry-${r.id}"
-                  onclick="retryPatient('${r.id}', '${escapeHtml(r.temp_ref_id)}')"
-                  style="min-width:105px"
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                  Retry Sync
-                </button>
+                <div style="display:inline-flex;gap:6px;align-items:center">
+                  ${r.status === 'CONFLICT' ? `
+                    <button
+                      class="btn btn-sm btn-warning"
+                      onclick="resolveConflictDialog('${r.id}')"
+                      style="min-width:115px;background:#d97706;color:#fff;border-color:#b45309"
+                    >
+                      Resolve Duplicate
+                    </button>
+                  ` : `
+                    <button
+                      class="btn btn-sm btn-primary retry-btn"
+                      id="btn-retry-${r.id}"
+                      onclick="retryPatient('${r.id}')"
+                      style="min-width:105px"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                      Retry Sync
+                    </button>
+                  `}
+                  <button
+                    class="btn btn-sm btn-secondary"
+                    onclick="returnToForm('${r.id}')"
+                    title="Return to form for editing"
+                  >
+                    Edit
+                  </button>
+                </div>
               </td>
             </tr>
           `).join('')}
@@ -324,44 +414,190 @@
     `;
   }
 
-  async function retryPatient(recordId, tempRefId) {
-    const btn = document.getElementById(`btn-retry-${recordId}`);
-    if (!btn || btn.disabled) return;
+  async function retryPatient(recordId) {
+    const record = failedRecords.find(r => r.id === recordId);
+    if (!record) return;
 
-    btn.disabled = true;
-    btn.innerHTML = `<span class="btn-loading-spinner"></span> Retrying...`;
+    const btn = document.getElementById(`btn-retry-${recordId}`);
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span class="btn-loading-spinner"></span> Retrying...`;
+    }
 
     try {
-      const res = await API.post(`/api/v1/offline-patients/${recordId}/retry`);
-      if (res.status === 'SUCCESS') {
-        Toast.show(`Patient synchronized successfully! Code: ${res.patient_code}`, 'success', 5000);
-
-        // Animate row removal
-        const row = document.getElementById(`row-${recordId}`);
-        if (row) {
-          row.classList.add('row-fade-out');
-          setTimeout(() => {
-            failedRecords = failedRecords.filter(r => r.id !== recordId && r.temp_ref_id !== tempRefId);
-            renderTable(document.getElementById('search-input')?.value || '');
-          }, 400);
+      if (record.isLocal) {
+        const res = await OfflineQueue.retryItem(record.localId);
+        if (res.success) {
+          Toast.show(`Patient synchronized successfully! Code: ${res.patient_code || 'CONFIRMED'}`, 'success', 5000);
+          removeRowAnimation(recordId);
+        } else if (res.status === 'CONFLICT') {
+          record.status = 'CONFLICT';
+          record.existingPatient = res.existingPatient;
+          record.failureReason = res.reason;
+          renderTable(document.getElementById('search-input')?.value || '');
+          Toast.show('Duplicate conflict detected. Click "Resolve Duplicate" to proceed.', 'warning', 6000);
+        } else {
+          Toast.show(`Sync failed: ${res.reason || 'Server rejected registration'}`, 'error', 6000);
+          resetRetryBtn(btn, recordId, res.reason);
         }
       } else {
-        const failureReason = res.failure_reason || 'Retry failed. Please check details.';
-        Toast.show(`Sync failed: ${failureReason}`, 'error', 6000);
-
-        const reasonBox = document.getElementById(`reason-${recordId}`);
-        if (reasonBox) reasonBox.textContent = failureReason;
-        const retryCounter = document.getElementById(`retries-${recordId}`);
-        if (retryCounter && res.retry_count) {
-          retryCounter.textContent = `Attempted: ${res.retry_count} times`;
+        const res = await API.post(`/api/v1/offline-patients/${recordId}/retry`);
+        if (res.status === 'SUCCESS') {
+          Toast.show(`Patient synchronized successfully! Code: ${res.patient_code}`, 'success', 5000);
+          removeRowAnimation(recordId);
+        } else {
+          const failureReason = res.failure_reason || 'Retry failed. Please check details.';
+          Toast.show(`Sync failed: ${failureReason}`, 'error', 6000);
+          resetRetryBtn(btn, recordId, failureReason, res.retry_count);
         }
-
-        btn.disabled = false;
-        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Retry Sync`;
       }
     } catch (err) {
       const msg = err.message || 'Retry request failed.';
       Toast.show(msg, 'error', 6000);
+      resetRetryBtn(btn, recordId, msg);
+    }
+  }
+
+  async function retryAllFailed() {
+    if (!failedRecords.length) {
+      Toast.show('No failed records to retry.', 'info');
+      return;
+    }
+
+    const btn = document.getElementById('retry-all-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span class="btn-loading-spinner"></span> Retrying All...`;
+    }
+
+    let syncedCount = 0;
+    let failedCount = 0;
+
+    for (const record of [...failedRecords]) {
+      try {
+        if (record.isLocal) {
+          const res = await OfflineQueue.retryItem(record.localId);
+          if (res.success) {
+            syncedCount++;
+            removeRowAnimation(record.id);
+          } else {
+            failedCount++;
+          }
+        } else {
+          const res = await API.post(`/api/v1/offline-patients/${record.id}/retry`).catch(() => ({ status: 'FAILED' }));
+          if (res.status === 'SUCCESS') {
+            syncedCount++;
+            removeRowAnimation(record.id);
+          } else {
+            failedCount++;
+          }
+        }
+      } catch (_) {
+        failedCount++;
+      }
+    }
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Retry All`;
+    }
+
+    Toast.show(`Retry completed: ${syncedCount} synchronized, ${failedCount} failed.`, syncedCount > 0 ? 'success' : 'warning', 6000);
+    setTimeout(loadFailedPatients, 1000);
+  }
+
+  function resolveConflictDialog(recordId) {
+    const record = failedRecords.find(r => r.id === recordId);
+    if (!record) return;
+
+    const existing = record.existingPatient || {};
+    const existingName = existing.name || 'Existing Patient';
+    const existingDate = existing.sample_date ? new Date(existing.sample_date).toLocaleDateString() : 'earlier today';
+    const existingCode = existing.patient_code || '';
+
+    const contentHtml = `
+      <div style="font-size:14px;color:var(--color-ink);line-height:1.6">
+        <p style="margin-bottom:12px">
+          A patient with this mobile number already exists:
+        </p>
+        <div style="background:var(--surface-table-header);padding:12px 16px;border-radius:6px;border:1px solid var(--color-border);margin-bottom:16px">
+          <div style="font-weight:700;color:var(--color-ink)">${escapeHtml(existingName)} ${existingCode ? '(' + escapeHtml(existingCode) + ')' : ''}</div>
+          <div style="font-size:12px;color:var(--color-ink-muted)">Registered: ${escapeHtml(existingDate)}</div>
+        </div>
+        <p style="font-size:13px;color:var(--color-ink-muted);margin-bottom:0">
+          Would you like to authorize an independent second registration with a new Patient ID and new invoice, or cancel/discard this offline record?
+        </p>
+      </div>
+    `;
+
+    Modal.confirm({
+      title: 'Duplicate Patient Registration',
+      body: contentHtml,
+      confirmText: 'Force Save Both',
+      cancelText: 'Cancel & Discard',
+      danger: false,
+      onConfirm: async () => {
+        if (record.isLocal) {
+          await OfflineQueue.resolveConflict(record.localId, 'force');
+        } else {
+          await API.post(`/api/v1/offline-patients/${record.id}/retry`, { force_duplicate: true });
+        }
+        Toast.show('Force save authorized. Synchronizing...', 'info', 4000);
+        setTimeout(loadFailedPatients, 800);
+      },
+      onCancel: async () => {
+        if (record.isLocal) {
+          await OfflineQueue.resolveConflict(record.localId, 'discard');
+        } else {
+          await API.delete(`/api/v1/offline-patients/${record.id}`).catch(() => {});
+        }
+        removeRowAnimation(recordId);
+        Toast.show('Record discarded.', 'info', 3000);
+      }
+    });
+  }
+
+  function returnToForm(recordId) {
+    const record = failedRecords.find(r => r.id === recordId);
+    if (!record) return;
+
+    const p = record.payload || record.patient_data || {};
+    localStorage.setItem('akriti_patient_draft', JSON.stringify({
+      name: record.patient_name || p.name,
+      mobile: record.mobile || p.mobile,
+      age: record.age || p.age,
+      gender: record.gender || p.gender,
+      sample_date: p.sample_date,
+      doctor_id: p.doctor_id,
+      test_ids: p.test_ids,
+      total_amount: p.total_amount,
+      discount_amount: p.discount_amount,
+      amount_paid: p.amount_paid,
+      payment_mode: p.payment_mode,
+    }));
+    Toast.show('Draft restored into Add Patient form', 'info', 3000);
+    window.location.href = '/staff/add-patient';
+  }
+
+  function removeRowAnimation(recordId) {
+    const row = document.getElementById(`row-${recordId}`);
+    if (row) {
+      row.classList.add('row-fade-out');
+      setTimeout(() => {
+        failedRecords = failedRecords.filter(r => r.id !== recordId);
+        renderTable(document.getElementById('search-input')?.value || '');
+      }, 400);
+    }
+  }
+
+  function resetRetryBtn(btn, recordId, failureReason, retryCount) {
+    const reasonBox = document.getElementById(`reason-${recordId}`);
+    if (reasonBox && failureReason) reasonBox.textContent = failureReason;
+    const retryCounter = document.getElementById(`retries-${recordId}`);
+    if (retryCounter && retryCount) {
+      retryCounter.textContent = `Attempted: ${retryCount} times`;
+    }
+    if (btn) {
       btn.disabled = false;
       btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Retry Sync`;
     }

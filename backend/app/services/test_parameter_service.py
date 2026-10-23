@@ -34,14 +34,35 @@ def save_test_parameters(db: Session, test_id: uuid.UUID, payload: TestParameter
 
 def submit_report_entry(db: Session, patient_id: uuid.UUID, payload: ReportEntrySubmit,
                         user_id: uuid.UUID, background_tasks, partial_release: bool = False, letterhead_mode: bool = False) -> Dict[str, Any]:
-    """FR-2.2 (§2.4) — Save entered result parameters and trigger background PDF generation."""
+    """FR-2.2 (§2.4) — Save entered result parameters and trigger background PDF generation with strict ownership checks."""
     patient = patient_repo.get_by_id(db, patient_id)
-    if not patient:
-        raise ValueError("Patient not found")
+    if not patient or getattr(patient, "deleted_at", None) is not None:
+        raise ValueError("Patient not found or inactive")
+
+    if not payload.tests:
+        raise ValueError("No test results submitted")
+
+    # 1. Enforce uniqueness across submitted test groups
+    submitted_test_ids = [tg.test_id for tg in payload.tests]
+    if len(submitted_test_ids) != len(set(submitted_test_ids)):
+        raise ValueError("Duplicate test groups submitted in payload")
+
+    # 2. Enforce that every submitted test is booked by this patient
+    booked_test_ids = {pt.test_id for pt in (patient.patient_tests or [])}
+    unbooked = set(submitted_test_ids) - booked_test_ids
+    if unbooked:
+        raise ValueError(f"Integrity violation: Submitted tests are not booked for this patient: {unbooked}")
+
+    # 3. Enforce parameter uniqueness per test group
+    for test_group in payload.tests:
+        p_ids = [item.parameter_id for item in test_group.results]
+        if len(p_ids) != len(set(p_ids)):
+            raise ValueError(f"Duplicate parameter entries submitted for test {test_group.test_id}")
 
     saved_total_count = 0
     test_notes_map = {}
 
+    # 4. Atomic execution across all tests
     for test_group in payload.tests:
         test_id = test_group.test_id
         if test_group.interpretation_note:
@@ -51,7 +72,6 @@ def submit_report_entry(db: Session, patient_id: uuid.UUID, payload: ReportEntry
             {
                 "parameter_id": item.parameter_id,
                 "entered_value": item.entered_value,
-                "is_abnormal": item.is_abnormal,
                 "interpretation_note": item.interpretation_note,
             }
             for item in test_group.results
@@ -94,13 +114,29 @@ def submit_report_entry(db: Session, patient_id: uuid.UUID, payload: ReportEntry
 
 
 def _background_generate_report(patient_id: uuid.UUID, user_id: uuid.UUID, test_notes_map: Dict[str, str], partial_release: bool = False, letterhead_mode: bool = False):
-    """Background task wrapper to run inside a fresh DB session."""
+    """Background task wrapper with error tracking and durable status logging."""
     from backend.app.core.db import SessionLocal
+    import logging
+    logger = logging.getLogger("akriti.reports")
     db = SessionLocal()
     try:
-        report_service.generate_and_save_structured_report(db, patient_id, user_id, test_notes_map, partial_release=partial_release, letterhead_mode=letterhead_mode)
+        report_service.generate_and_save_structured_report(
+            db, patient_id, user_id, test_notes_map,
+            partial_release=partial_release, letterhead_mode=letterhead_mode
+        )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Background PDF report generation failed for patient {patient_id}: {e}", exc_info=True)
+        try:
+            from backend.app.models.patient_status_history import PatientStatusHistory
+            h = PatientStatusHistory(
+                patient_id=patient_id,
+                status="report_generation_failed",
+                updated_by=user_id,
+                extra_info={"error": "PDF generation failed in background task"}
+            )
+            db.add(h)
+            db.commit()
+        except Exception:
+            db.rollback()
     finally:
         db.close()

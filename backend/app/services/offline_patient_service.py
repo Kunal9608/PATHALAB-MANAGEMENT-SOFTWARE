@@ -160,46 +160,32 @@ def process_single_registration(
         if "doctor_id" in raw_data and raw_data["doctor_id"]:
             raw_data["doctor_id"] = uuid.UUID(str(raw_data["doctor_id"]))
 
-        # Check for idempotent recovery: did this patient already commit in PostgreSQL earlier?
-        # Scenario: backend committed patient -> network response lost -> client retried
-        mobile = raw_data.get("mobile")
-        sample_date = raw_data.get("sample_date") or date.today()
-        name = raw_data.get("name")
+        # Check for idempotent recovery: did this exact cached record already commit in PostgreSQL earlier?
+        if record.permanent_patient_id:
+            committed_existing = db.query(Patient).filter(Patient.id == record.permanent_patient_id).first()
+            if committed_existing:
+                record.status = "SUCCESS"
+                record.permanent_patient_code = committed_existing.patient_code
+                record.synced_at = datetime.now(timezone.utc)
+                record.failure_reason = None
+                record.error_details = None
+                db.commit()
 
-        # Check if identical patient was created by this user recently
-        committed_existing = db.query(Patient).filter(
-            Patient.mobile == mobile,
-            Patient.name == name,
-            Patient.sample_date == sample_date,
-            Patient.collected_by == current_user.id,
-            Patient.deleted_at.is_(None)
-        ).order_by(Patient.created_at.desc()).first()
+                audit_service.log(
+                    db, "offline_patient.idempotent_recovery",
+                    actor_user_id=current_user.id,
+                    entity_type="patient",
+                    entity_id=committed_existing.id,
+                    after={"temp_ref_id": record.temp_ref_id, "patient_code": committed_existing.patient_code},
+                )
 
-        if committed_existing and not raw_data.get("force_duplicate"):
-            # Recovered idempotently from previous commit
-            record.status = "SUCCESS"
-            record.permanent_patient_id = committed_existing.id
-            record.permanent_patient_code = committed_existing.patient_code
-            record.synced_at = datetime.now(timezone.utc)
-            record.failure_reason = None
-            record.error_details = None
-            db.commit()
-
-            audit_service.log(
-                db, "offline_patient.idempotent_recovery",
-                actor_user_id=current_user.id,
-                entity_type="patient",
-                entity_id=committed_existing.id,
-                after={"temp_ref_id": record.temp_ref_id, "patient_code": committed_existing.patient_code},
-            )
-
-            return {
-                "status": "SUCCESS",
-                "patient_id": str(committed_existing.id),
-                "patient_code": committed_existing.patient_code,
-                "temp_ref_id": record.temp_ref_id,
-                "recovered": True,
-            }
+                return {
+                    "status": "SUCCESS",
+                    "patient_id": str(committed_existing.id),
+                    "patient_code": committed_existing.patient_code,
+                    "temp_ref_id": record.temp_ref_id,
+                    "recovered": True,
+                }
 
         # Validate with PatientCreate schema
         pydantic_payload = PatientCreate(**raw_data)
@@ -273,6 +259,7 @@ def retry_failed_registration(
     db: Session,
     record_id_or_ref: str,
     current_user: User,
+    payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Retries a selected failed cached registration.
@@ -292,6 +279,12 @@ def retry_failed_registration(
 
     if not record:
         raise HTTPException(status_code=404, detail="Failed cached record not found")
+
+    if payload and payload.get("force_duplicate"):
+        p_data = dict(record.patient_data or {})
+        p_data["force_duplicate"] = True
+        record.patient_data = p_data
+        db.commit()
 
     if record.status == "SYNCING":
         # Check if stale (>60s)
@@ -314,6 +307,29 @@ def retry_failed_registration(
 
     # Execute retry
     return process_single_registration(db, record, current_user)
+
+
+def delete_failed_registration(
+    db: Session,
+    record_id_or_ref: str,
+    current_user: User,
+) -> Dict[str, Any]:
+    """Discard a failed cached registration owned by the current user."""
+    query = db.query(CachedPatientRegistration).filter(
+        CachedPatientRegistration.owner_id == current_user.id
+    )
+    try:
+        rec_uuid = uuid.UUID(record_id_or_ref)
+        record = query.filter(or_(CachedPatientRegistration.id == rec_uuid, CachedPatientRegistration.temp_ref_id == record_id_or_ref)).first()
+    except ValueError:
+        record = query.filter(CachedPatientRegistration.temp_ref_id == record_id_or_ref).first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Failed cached record not found")
+
+    db.delete(record)
+    db.commit()
+    return {"status": "DELETED", "temp_ref_id": record.temp_ref_id}
 
 
 def list_failed_registrations(
@@ -364,6 +380,7 @@ def list_failed_registrations(
             "permanent_patient_id": str(item.permanent_patient_id) if item.permanent_patient_id else None,
             "permanent_patient_code": item.permanent_patient_code,
             "status": "FAILED",
+            "patient_data": p_data,
         })
 
     return {
@@ -420,16 +437,21 @@ def get_failed_registration(
     }
 
 
-def recover_stale_syncing_jobs(db: Session, max_age_seconds: int = 60) -> int:
+def recover_stale_syncing_jobs(db: Session, max_age_seconds: int = 60, owner_user_id: Optional[uuid.UUID] = None) -> int:
     """
-    Recovers any jobs stuck in 'SYNCING' state due to worker or server crash.
+    Recovers jobs stuck in 'SYNCING' state due to worker or server crash.
     Transitions them back to 'FAILED' with a clear diagnostic so they can be retried safely.
+    If owner_user_id is provided, only recovers records owned by that user.
     """
     threshold = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
-    stale_jobs = db.query(CachedPatientRegistration).filter(
+    query = db.query(CachedPatientRegistration).filter(
         CachedPatientRegistration.status == "SYNCING",
         CachedPatientRegistration.last_attempt_at < threshold
-    ).all()
+    )
+    if owner_user_id:
+        query = query.filter(CachedPatientRegistration.created_by_user_id == owner_user_id)
+
+    stale_jobs = query.all()
 
     recovered_count = 0
     for job in stale_jobs:

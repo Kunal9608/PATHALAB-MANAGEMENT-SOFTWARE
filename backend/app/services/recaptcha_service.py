@@ -17,12 +17,16 @@ def verify_recaptcha_token(token: str) -> bool:
         logger.warning("reCAPTCHA validation failed: token is missing")
         return False
 
-    # Developer/local test key bypass (Google public test keys)
-    if settings.RECAPTCHA_SECRET_KEY in [
+    # Test key handling: allow in development/test only, strictly reject in production
+    test_keys = {
         "6LeIxAcTAAAAAGG-vFI1TnFTxWGRtAUMuO_FnD4Q",
         "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"
-    ]:
-        logger.info("reCAPTCHA: Public test key detected. Approving verification automatically.")
+    }
+    if settings.RECAPTCHA_SECRET_KEY in test_keys:
+        if settings.is_production:
+            logger.error("reCAPTCHA configuration error: Public test key cannot be used in production.")
+            return False
+        logger.info("reCAPTCHA: Public test key detected in non-production. Approving verification.")
         return True
 
     try:
@@ -40,7 +44,8 @@ def verify_recaptcha_token(token: str) -> bool:
         score = result.get("score", 0.0)
         error_codes = result.get("error-codes", [])
 
-        logger.info(f"reCAPTCHA validation response: success={success}, score={score}, error_codes={error_codes}")
+        # Log safely without secret keys or raw token
+        logger.info(f"reCAPTCHA validation result: success={success}, score={score}")
 
         if success:
             # For reCAPTCHA v3, score is 0.0 (bot) to 1.0 (human). Standard threshold is 0.5.
@@ -49,15 +54,21 @@ def verify_recaptcha_token(token: str) -> bool:
                 return False
             return True
 
-        # Staging / Cloud domain resilience (e.g., akritidc.onrender.com not yet added in Google console)
+        # Hostname mismatch handling: reject in production
         if "hostname-mismatch" in error_codes:
-            logger.warning(f"reCAPTCHA: hostname-mismatch on {result.get('hostname')}. Allowing request for cloud preview/staging.")
+            if settings.is_production:
+                logger.error("reCAPTCHA validation failed: hostname-mismatch is rejected in production.")
+                return False
+            logger.warning(f"reCAPTCHA: hostname-mismatch on {result.get('hostname')}. Allowed in non-production.")
             return True
 
-        logger.warning(f"reCAPTCHA validation failed: {error_codes}")
+        logger.warning(f"reCAPTCHA validation rejected with error codes: {error_codes}")
         return False
 
     except Exception as e:
-        logger.error(f"reCAPTCHA verification exception: {e}")
-        # Never lock out production if Google API is temporarily unreachable
+        logger.error(f"reCAPTCHA verification network/API exception: {e}")
+        # In production, fail closed to prevent authentication/anti-abuse bypass
+        if settings.is_production:
+            return False
+        # Development fallback
         return True

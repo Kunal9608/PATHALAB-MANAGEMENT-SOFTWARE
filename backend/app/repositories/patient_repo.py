@@ -189,39 +189,39 @@ def get_today_stats(db: Session):
 
 
 def generate_patient_code(db: Session, year: int) -> str:
-    """Generate Patient ID using PostgreSQL sequence — atomic, zero-collision."""
+    """
+    Generate sequential Patient ID based strictly on committed patients.
+    Guarantees no gaps: failed or uncommitted registrations never consume a code.
+    Protected by PostgreSQL transaction advisory lock to prevent race conditions.
+    """
     from sqlalchemy import text
-    from sqlalchemy.exc import ProgrammingError, OperationalError
-    seq_name = f"patient_seq_{year}"
-    
-    try:
-        # Fast path: atomic nextval directly from PostgreSQL sequence (O(1), non-blocking)
-        result = db.execute(text(f"SELECT nextval('{seq_name}')"))
-        seq_val = result.scalar()
-    except (ProgrammingError, OperationalError):
-        db.rollback()
-        # Cold start / sequence missing: serialize sequence creation with transaction advisory lock
-        try:
-            lock_id = (year * 10007) % 2147483647
-            db.execute(text(f"SELECT pg_advisory_xact_lock({lock_id})"))
-            db.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {seq_name} START 1"))
-            result = db.execute(text(f"SELECT nextval('{seq_name}')"))
-            seq_val = result.scalar()
-        except Exception:
-            db.rollback()
-            # Non-PostgreSQL / SQLite test fallback
-            from backend.app.models.patient import Patient
-            max_code = db.query(func.max(Patient.patient_code)).filter(
-                Patient.patient_code.like(f"PAT{str(year)[-2:]}%")
-            ).scalar()
-            if max_code and len(max_code) >= 7:
-                try:
-                    seq_val = int(max_code[5:]) + 1
-                except ValueError:
-                    seq_val = 1
-            else:
-                seq_val = 1
-        
     year_short = str(year)[-2:]
+    lock_id = (year * 10007) % 2147483647
+
+    try:
+        # Acquire transaction-scoped advisory lock (released automatically on commit or rollback)
+        db.execute(text(f"SELECT pg_advisory_xact_lock({lock_id})"))
+        
+        # Query highest committed sequence number for this year in active patients
+        res = db.execute(text(f"""
+            SELECT COALESCE(MAX(CAST(NULLIF(SUBSTRING(patient_code FROM 6), '') AS INTEGER)), 0)
+            FROM patients
+            WHERE patient_code LIKE 'PAT{year_short}%'
+        """)).scalar()
+        seq_val = (res or 0) + 1
+    except Exception:
+        # Fallback for SQLite / unit tests
+        from backend.app.models.patient import Patient
+        max_code = db.query(func.max(Patient.patient_code)).filter(
+            Patient.patient_code.like(f"PAT{year_short}%")
+        ).scalar()
+        if max_code and len(max_code) >= 6:
+            try:
+                seq_val = int(max_code[5:]) + 1
+            except ValueError:
+                seq_val = 1
+        else:
+            seq_val = 1
+
     padded = str(seq_val).zfill(4)
     return f"PAT{year_short}{padded}"

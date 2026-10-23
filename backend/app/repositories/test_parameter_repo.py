@@ -64,44 +64,75 @@ def get_patient_test_results(db: Session, patient_id: uuid.UUID) -> List[Patient
     )
 
 
+def calculate_is_abnormal(param: Optional[TestParameter], val_str: str) -> bool:
+    """Authoritative server-side calculation of is_abnormal — never trust client flag."""
+    if not param or not val_str:
+        return False
+    val_str = str(val_str).strip()
+    if param.input_type == "numeric":
+        try:
+            val = float(val_str)
+            if param.reference_low is not None and val < float(param.reference_low):
+                return True
+            if param.reference_high is not None and val > float(param.reference_high):
+                return True
+        except ValueError:
+            return False
+    elif param.input_type in ("options", "dropdown", "select", "text", "multiline", "serology"):
+        ref_text = getattr(param, "reference_text", None) or getattr(param, "reference_range", None)
+        if ref_text:
+            val_lower = val_str.lower()
+            ref_lower = str(ref_text).lower()
+            if "negative" in ref_lower and ("positive" in val_lower or "reactive" in val_lower):
+                return True
+            if "non-reactive" in ref_lower and "reactive" in val_lower and "non-reactive" not in val_lower:
+                return True
+    return False
+
+
 def save_patient_test_results(db: Session, patient_id: uuid.UUID, test_id: uuid.UUID,
                               results: list, entered_by: uuid.UUID) -> List[PatientTestResult]:
-    """Save result items for a given test in a patient report entry."""
-    # Delete existing results for this patient and test so re-submission cleanly updates
+    """Save result items for a given test in a patient report entry with clinical boundary enforcement."""
+    # 1. Validate parameter uniqueness within this submission
+    param_ids = [item["parameter_id"] for item in results if "parameter_id" in item]
+    if len(param_ids) != len(set(param_ids)):
+        raise ValueError(f"Duplicate parameter IDs submitted for test {test_id}")
+
+    # 2. Batch pre-fetch parameters strictly constrained to THIS test_id
+    param_map = {}
+    if param_ids:
+        params = db.query(TestParameter).filter(
+            TestParameter.id.in_(param_ids),
+            TestParameter.test_id == test_id
+        ).all()
+        param_map = {p.id: p for p in params}
+
+        # Ensure all submitted parameters actually belong to this test
+        if len(params) != len(param_ids):
+            missing_ids = set(param_ids) - set(param_map.keys())
+            raise ValueError(
+                f"Parameter integrity violation: Parameter(s) {missing_ids} do not belong to test {test_id}"
+            )
+
+    # 3. Clean previous results for this test atomically before inserting validated set
     db.query(PatientTestResult).filter(
         PatientTestResult.patient_id == patient_id,
         PatientTestResult.test_id == test_id
-    ).delete()
+    ).delete(synchronize_session=False)
 
     saved_items = []
-    # Batch pre-fetch all parameters in one query to eliminate N+1 round trips
-    param_ids = [item["parameter_id"] for item in results if "parameter_id" in item]
-    param_map = {}
-    if param_ids:
-        params = db.query(TestParameter).filter(TestParameter.id.in_(param_ids)).all()
-        param_map = {p.id: p for p in params}
-
     for item in results:
-        # Determine is_abnormal
         param = param_map.get(item["parameter_id"])
-        is_abnormal = False
-        if item.get("is_abnormal") is not None:
-            is_abnormal = bool(item["is_abnormal"])
-        elif param and param.input_type == "numeric" and item["entered_value"]:
-            try:
-                val = float(item["entered_value"])
-                if param.reference_low is not None and val < float(param.reference_low):
-                    is_abnormal = True
-                if param.reference_high is not None and val > float(param.reference_high):
-                    is_abnormal = True
-            except ValueError:
-                pass
+        val_str = str(item.get("entered_value", "")).strip()
+
+        # 4. Authoritative server-side calculation of is_abnormal — never trust client flag
+        is_abnormal = calculate_is_abnormal(param, val_str)
 
         r = PatientTestResult(
             patient_id=patient_id,
             test_id=test_id,
             parameter_id=item["parameter_id"],
-            entered_value=item["entered_value"],
+            entered_value=val_str,
             is_abnormal=is_abnormal,
             interpretation_note=item.get("interpretation_note"),
             entered_by=entered_by,

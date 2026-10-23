@@ -613,7 +613,7 @@
       const isOnline = await OfflineQueue.isOnline();
       if (!isOnline) {
         const tempRef = await OfflineQueue.enqueue(
-          editId ? `/api/v1/patients/${editId}` : '/api/v1/patients',
+          editId ? `/api/v1/patients/${editId}` : '/api/v1/offline-patients',
           editId ? 'PATCH' : 'POST',
           payload,
           idempotencyKey,
@@ -635,15 +635,26 @@
           Toast.show(`Patient registered — ${res.patient_code}`, 'success');
         }
       } catch (saveErr) {
-        if (saveErr.status === 409 && saveErr.data?.detail?.existing_patient) {
-          const existing = saveErr.data.detail.existing_patient;
+        let dupDetail = saveErr.data?.detail || saveErr.data?.error?.details;
+        if (typeof dupDetail === 'string') {
+          try { dupDetail = JSON.parse(dupDetail.replace(/'/g, '"')); } catch (_) {}
+        }
+        const isDuplicate = saveErr.status === 409 && (
+          saveErr.data?.error?.code === 'DUPLICATE_PATIENT' ||
+          dupDetail?.code === 'DUPLICATE_PATIENT' ||
+          !!dupDetail?.existing_patient
+        );
+
+        if (isDuplicate && dupDetail?.existing_patient) {
+          const existing = dupDetail.existing_patient;
           const content = `
             <div style="margin-bottom:16px;font-size:14px;color:var(--color-ink-muted)">
               A patient with the mobile number <strong>${escapeHtml(payload.mobile)}</strong> was already registered recently.
             </div>
             <div style="background:var(--color-bg-alt);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;margin-bottom:20px;">
               <div style="font-size:12px;font-weight:600;color:var(--color-ink-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em">Existing Patient Match:</div>
-              <div style="font-weight:700;color:var(--color-ink)">${escapeHtml(existing.name)}</div>
+              <div style="font-weight:700;color:var(--color-ink)">${escapeHtml(existing.name || 'Existing Patient')}</div>
+              ${existing.created_at ? `<div style="font-size:12px;color:var(--color-ink-faint);margin-top:2px">Registered: ${formatDateTime(existing.created_at)}</div>` : ''}
             </div>
             <div style="font-size:14px;font-weight:500;color:var(--color-ink);margin-bottom:8px">Are these the same person?</div>
           `;
@@ -654,17 +665,37 @@
           });
           if (force) {
             payload.force_duplicate = true;
+            const forceIdempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (idempotencyKey + '-force');
             if (editId) {
-              await API.patch(`/api/v1/patients/${editId}`, payload, { idempotencyKey });
+              await API.patch(`/api/v1/patients/${editId}`, payload, { idempotencyKey: forceIdempotencyKey });
               Toast.show('Patient updated successfully', 'success');
             } else {
-              const res2 = await API.post('/api/v1/patients', payload, { idempotencyKey });
+              const res2 = await API.post('/api/v1/patients', payload, { idempotencyKey: forceIdempotencyKey });
               Toast.show(`Patient registered — ${res2.patient_code}`, 'success');
             }
           } else {
             return;
           }
         } else {
+          const isNetworkErr = !navigator.onLine || saveErr.status === 0 ||
+            saveErr.message === 'No internet connection' ||
+            saveErr.message === 'Server is unreachable' ||
+            saveErr.message?.includes('fetch') ||
+            saveErr.message?.includes('Failed to fetch');
+          if (isNetworkErr) {
+            const tempRef = await OfflineQueue.enqueue(
+              editId ? `/api/v1/patients/${editId}` : '/api/v1/offline-patients',
+              editId ? 'PATCH' : 'POST',
+              payload,
+              idempotencyKey,
+            );
+            localStorage.removeItem('akriti_patient_draft');
+            Toast.show(`Connection lost: Saved locally [${tempRef}] and queued for sync.`, 'warning', 6000);
+            PatientForm.clearForm();
+            document.getElementById('patient-main-form').reset();
+            showStep(1);
+            return;
+          }
           throw saveErr;
         }
       }

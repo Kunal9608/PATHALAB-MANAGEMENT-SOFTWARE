@@ -12,18 +12,19 @@ from backend.app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# --- Face recognition is disabled right now per user request ---
-fr_lib = None
-FACE_RECOGNITION_AVAILABLE = False
-logger.warning("face_recognition explicitly disabled — using stub mode for face enrollment")
+try:
+    import face_recognition as fr_lib
+    FACE_RECOGNITION_AVAILABLE = True
+except (ImportError, Exception, SystemExit):
+    fr_lib = None
+    FACE_RECOGNITION_AVAILABLE = False
+    logger.warning("face_recognition library not operational — biometric face recognition is disabled")
 
 
 def _compute_embedding(image_bytes: bytes) -> Optional[np.ndarray]:
-    """Return 128-dim face embedding or None if no single face found."""
+    """Return 128-dim face embedding or None if face recognition is unavailable or no face found."""
     if not FACE_RECOGNITION_AVAILABLE or fr_lib is None:
-        # Stub: return random unit vector for development without dlib
-        vec = np.random.rand(128).astype(np.float32)
-        return vec / np.linalg.norm(vec)
+        return None
 
     import io
     from PIL import Image
@@ -70,6 +71,13 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 def enroll_sample(db: Session, user_id: uuid.UUID, image_bytes: bytes) -> dict:
     """FR-2.2 — Capture one face sample. Activates account when min samples reached."""
+    if not FACE_RECOGNITION_AVAILABLE or fr_lib is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail="Biometric face recognition service is unavailable on this system."
+        )
+
     embedding = _compute_embedding(image_bytes)
 
     if embedding is None:
@@ -112,6 +120,13 @@ def enroll_sample(db: Session, user_id: uuid.UUID, image_bytes: bytes) -> dict:
 
 def recognize(db: Session, image_bytes: bytes) -> dict:
     """FR-3.1 — Recognize face against all enrolled embeddings."""
+    if not FACE_RECOGNITION_AVAILABLE or fr_lib is None:
+        return {
+            "matched": False,
+            "reason": "Biometric face recognition service is unavailable on this system",
+            "service_available": False,
+        }
+
     probe_embedding = _compute_embedding(image_bytes)
 
     if probe_embedding is None:

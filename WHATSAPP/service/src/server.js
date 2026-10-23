@@ -11,19 +11,31 @@ const messageService = require('./message-service');
 
 const app = express();
 
-// Body parsers with safe size limits
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+// Body parsers with safe size limits (5MB maximum)
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
-// CORS configuration (allow FastAPI backend origin)
+// Strict CORS configuration
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (e.g. server-to-server HTTP calls from FastAPI)
     if (!origin) return callback(null, true);
-    if (config.allowedOrigins.some(ao => origin.startsWith(ao))) {
-      return callback(null, true);
+    try {
+      const originUrl = new URL(origin).origin;
+      const isAllowed = config.allowedOrigins.some(ao => {
+        try {
+          return new URL(ao).origin === originUrl;
+        } catch {
+          return ao === originUrl;
+        }
+      });
+      if (isAllowed) {
+        return callback(null, true);
+      }
+      return callback(new Error('CORS origin denied'), false);
+    } catch {
+      return callback(new Error('Malformed CORS origin'), false);
     }
-    return callback(null, true); // Internal service bounded to localhost
   },
   credentials: true
 }));

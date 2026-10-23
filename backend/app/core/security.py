@@ -127,9 +127,9 @@ def canonical_json(data: dict) -> str:
 
 
 def validate_password_policy(password: str) -> bool:
-    """FR-1.4: min 6 chars, max 12 chars, at least one letter and one digit."""
+    """Password policy: min 6 chars, up to 128 chars (supports modern passphrases), at least one letter and one digit."""
     import re
-    if len(password) < 6 or len(password) > 12:
+    if not password or len(password) < 6 or len(password) > 128:
         return False
     if not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
         return False

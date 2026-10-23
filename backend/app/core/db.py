@@ -85,8 +85,9 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
         duration = time.time() - start_time
         clean_stmt = statement.strip()
         if duration > 2.5 and not clean_stmt.startswith("SELECT 1"):  # Log actual slow queries exceeding 2.5s
+            param_count = len(parameters) if parameters is not None and hasattr(parameters, "__len__") else (1 if parameters else 0)
             logger.warning(
-                f"SLOW SQL [{duration:.3f}s]: {statement[:200]} | params: {str(parameters)[:100]}"
+                f"SLOW SQL [{duration:.3f}s]: {clean_stmt[:200]} | param_count: {param_count}"
             )
 
 
@@ -140,7 +141,11 @@ def enable_pgvector(db_session):
 
 
 def init_db():
-    """Create all tables (used in development; production uses Alembic)."""
+    """Create all tables (used in development/testing; production uses Alembic migrations)."""
+    if getattr(settings, "is_production", False):
+        logger.info("Production mode: skipping Base.metadata.create_all() — schema evolution is driven via Alembic.")
+        return
+
     from backend.app.models import (  # noqa: F401 — import all models for metadata
         user, face_embedding, attendance_event, patient, patient_test,
         test, test_price_history, doctor, franchise, report, expense,

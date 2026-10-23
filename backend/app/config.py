@@ -103,6 +103,22 @@ class Settings(BaseSettings):
                     "Generate a cryptographically secure random key using a CSPRNG."
                 )
 
+            # Validate reCAPTCHA keys in production
+            if self.ENABLE_RECAPTCHA:
+                if self.RECAPTCHA_SECRET_KEY in {
+                    "6LeIxAcTAAAAAGG-vFI1TnFTxWGRtAUMuO_FnD4Q",
+                    "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe",
+                }:
+                    raise ValueError("Cannot use Google reCAPTCHA public test secret key in production.")
+
+            # Validate WhatsApp token in production
+            if self.WHATSAPP_ENABLED:
+                if self.WHATSAPP_SERVICE_TOKEN == "pathlab_wa_sec_token_9f83a21b47c0e6":
+                    raise ValueError(
+                        "WHATSAPP_SERVICE_TOKEN is using the insecure default repository placeholder. "
+                        "Production requires a high-entropy secret token generated specifically for this deployment."
+                    )
+
         return self
 
     # Email
@@ -203,7 +219,7 @@ class Settings(BaseSettings):
 
     # Seed
     ADMIN_SEED_EMAIL: str = "kunaldixit.2995@gmail.com"
-    ADMIN_SEED_TEMP_PASSWORD: str = "Akriti@2024"
+    ADMIN_SEED_TEMP_PASSWORD: str = ""
 
     # Google reCAPTCHA
     RECAPTCHA_SITE_KEY: str = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
@@ -220,10 +236,19 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    # Storage Settings
-    STORAGE_PROVIDER: str = "local" # 'local' or 'supabase'
+    # Storage Settings ('s3' for Joy.services S3, or 'local' fallback)
+    STORAGE_PROVIDER: str = "s3"
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
+
+    # S3 Object Storage (joy.services / AWS S3 / MinIO)
+    S3_ENDPOINT_URL: str = "https://nz.in.s3.joy.services"
+    S3_ACCESS_KEY_ID: str = ""
+    S3_SECRET_ACCESS_KEY: str = ""
+    S3_BUCKET_NAME: str = "pathlab-reprts"
+    S3_REGION_NAME: str = "default"
+    S3_SIGNATURE_VERSION: str = "s3v4"
+    S3_ADDRESSING_STYLE: str = "path"
 
     # WhatsApp Integration Service
     WHATSAPP_ENABLED: bool = True

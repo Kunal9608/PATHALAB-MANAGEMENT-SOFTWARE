@@ -49,18 +49,19 @@ async def lifespan(app: FastAPI):
             print("  [FATAL] JWT_SECRET_KEY is insecure, missing, too short, or lacks entropy in production. Exiting.")
             sys.exit(1)
             
-    for attempt in range(1, 4):
-        try:
-            init_db()
-            break
-        except Exception as e:
-            if attempt < 3:
-                import time
-            else:
-                print(f"  [WARN] DB init: {e}")
-                if settings.is_production:
-                    import sys
-                    print("  [FATAL] Database initialization failed in production. Exiting to prevent silent failures.")
+    if settings.is_production:
+        logger.info("Production environment: Schema evolution is managed via explicit Alembic migrations.")
+    else:
+        for attempt in range(1, 4):
+            try:
+                init_db()
+                break
+            except Exception as e:
+                if attempt < 3:
+                    import time
+                    time.sleep(0.5)
+                else:
+                    print(f"  [WARN] DB init: {e}")
 
     # Recover any stale offline syncing jobs left by previous server crash
     try:
@@ -298,34 +299,80 @@ async def db_interface_exception_handler(request: Request, exc: InterfaceError):
 
 
 # ── Settings API (lab config) ─────────────────────────────────────────────────
-# In-memory overlay for lab settings (persists for process lifetime)
-_lab_settings_overlay: dict = {}
+_LAB_SETTINGS_FILE = Path("uploads/lab_settings.json")
 
 
-@app.get("/api/v1/settings/lab")
-def get_lab_settings(current_user=Depends(get_current_user)):
-    """Authenticated users (Admin & Staff): returns lab configuration including UPI VPA, name, address, etc."""
+def _load_persisted_lab_settings() -> dict:
+    """Load persisted operational lab settings from Redis cache or local storage."""
+    try:
+        from backend.app.core.redis_client import get_redis
+        r = get_redis()
+        if r:
+            cached = r.get("akriti:lab_settings_overlay")
+            if cached:
+                import json
+                return json.loads(cached)
+    except Exception:
+        pass
+
+    if _LAB_SETTINGS_FILE.is_file():
+        try:
+            import json
+            return json.loads(_LAB_SETTINGS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_persisted_lab_settings(data: dict) -> None:
+    """Persist operational lab settings to Redis and durable local storage."""
+    import json
+    try:
+        from backend.app.core.redis_client import get_redis
+        r = get_redis()
+        if r:
+            r.set("akriti:lab_settings_overlay", json.dumps(data))
+    except Exception:
+        pass
+
+    try:
+        _LAB_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _LAB_SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to persist lab settings to disk: {e}")
+
+
+def _get_effective_lab_settings() -> dict:
+    """Return effective settings merging environment defaults with persisted overrides."""
+    overlay = _load_persisted_lab_settings()
     from backend.app.services import notification_service
     return {
-        "lab_name":     _lab_settings_overlay.get("lab_name",     settings.LAB_NAME),
-        "lab_upi_vpa":  _lab_settings_overlay.get("lab_upi_vpa",  settings.LAB_UPI_VPA),
-        "lab_phone":    _lab_settings_overlay.get("lab_phone",    settings.LAB_PHONE),
-        "lab_address":  _lab_settings_overlay.get("lab_address",  settings.LAB_ADDRESS),
-        "lab_gstin":    _lab_settings_overlay.get("lab_gstin",    settings.LAB_GSTIN),
-        "report_footer": _lab_settings_overlay.get("report_footer", ""),
+        "lab_name": overlay.get("lab_name", settings.LAB_NAME),
+        "lab_upi_vpa": overlay.get("lab_upi_vpa", settings.LAB_UPI_VPA),
+        "lab_phone": overlay.get("lab_phone", settings.LAB_PHONE),
+        "lab_address": overlay.get("lab_address", settings.LAB_ADDRESS),
+        "lab_gstin": overlay.get("lab_gstin", settings.LAB_GSTIN),
+        "report_footer": overlay.get("report_footer", ""),
         "email_notifications_enabled": notification_service.EMAIL_NOTIFICATIONS_ENABLED,
         "recaptcha_site_key": settings.RECAPTCHA_SITE_KEY,
         "recaptcha_enabled": settings.ENABLE_RECAPTCHA,
     }
 
 
+@app.get("/api/v1/settings/lab")
+def get_lab_settings(current_user=Depends(get_current_user)):
+    """Authenticated users (Admin & Staff): returns lab configuration."""
+    return _get_effective_lab_settings()
+
+
 @app.get("/api/v1/settings/lab/public")
 def get_lab_settings_public():
-    """Public endpoint: returns only the minimal info needed for the login page (reCAPTCHA)."""
+    """Public endpoint: returns only minimal info needed for login page (reCAPTCHA, lab name)."""
+    overlay = _load_persisted_lab_settings()
     return {
         "recaptcha_site_key": settings.RECAPTCHA_SITE_KEY,
         "recaptcha_enabled": settings.ENABLE_RECAPTCHA,
-        "lab_name": _lab_settings_overlay.get("lab_name", settings.LAB_NAME),
+        "lab_name": overlay.get("lab_name", settings.LAB_NAME),
     }
 
 
@@ -347,13 +394,16 @@ def patch_lab_settings(
     payload: LabSettingsPatchSchema,
     current_user=Depends(require_admin),
 ):
-    global _lab_settings_overlay
     update = payload.model_dump(exclude_none=True)
     if "email_notifications_enabled" in update:
         from backend.app.services import notification_service
         notification_service.EMAIL_NOTIFICATIONS_ENABLED = update["email_notifications_enabled"]
-    _lab_settings_overlay.update(update)
-    return get_lab_settings()
+    
+    current_overlay = _load_persisted_lab_settings()
+    current_overlay.update(update)
+    _save_persisted_lab_settings(current_overlay)
+    
+    return _get_effective_lab_settings()
 
 
 class DeleteOtpRequestSchema(PydanticBaseModel):
@@ -387,6 +437,7 @@ def delete_request_otp(
 class DeleteEverythingSchema(PydanticBaseModel):
     password: str
     otp: str
+    dry_run: bool = False
 
 
 @app.post("/api/v1/settings/delete-everything")
@@ -397,16 +448,20 @@ def delete_everything(
 ):
     from backend.app.core.db import SessionLocal
     from backend.app.core.security import verify_password
-    from backend.app.services import auth_service, pdf_generator
-    from fastapi.responses import StreamingResponse
+    from backend.app.services import auth_service, pdf_generator, audit_service
+    from fastapi.responses import StreamingResponse, JSONResponse
     from fastapi import HTTPException
     import io
-    
+    import os
+    import logging
+
+    clean_logger = logging.getLogger("akriti.cleanup")
+
     # 1. Verify Password
     is_valid, _ = verify_password(payload.password, current_user.password_hash)
     if not is_valid:
         raise HTTPException(status_code=400, detail="Incorrect account password")
-        
+
     db = SessionLocal()
     try:
         # 2. Verify OTP
@@ -417,49 +472,87 @@ def delete_everything(
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        # 3. Query patients from past 15 days
+        # 3. Query patients from defined cleanup window (past 15 days)
         from backend.app.models.patient import Patient
+        from backend.app.models.patient_test import PatientTest
+        from backend.app.models.patient_test_result import PatientTestResult
+        from backend.app.models.report import Report
+        from backend.app.models.patient_status_history import PatientStatusHistory
         from datetime import datetime, timedelta, timezone
         from sqlalchemy import and_
-        
+
         cutoff = datetime.now(timezone.utc) - timedelta(days=15)
         patients = db.query(Patient).filter(
             and_(
                 Patient.created_at >= cutoff,
                 Patient.deleted_at.is_(None)
             )
-        ).order_by(Patient.created_at.desc()).limit(50).all()
-        
-        # 4. Generate backup PDF
+        ).order_by(Patient.created_at.desc()).all()
+
+        patient_ids = [p.id for p in patients]
+
+        # Find reports strictly belonging to these patients
+        reports = db.query(Report).filter(Report.patient_id.in_(patient_ids)).all() if patient_ids else []
+
+        # Collect exact file paths belonging ONLY to these target reports
+        target_files = [str(r.file_path) for r in reports if r.file_path]
+        target_local_files = [f for f in target_files if not f.startswith("s3:")]
+        target_s3_files = [f for f in target_files if f.startswith("s3:")]
+
+        # Dry run preview mode
+        if payload.dry_run:
+            return {
+                "status": "dry_run",
+                "affected_patients_count": len(patients),
+                "affected_reports_count": len(reports),
+                "local_files_to_delete_count": len(target_local_files),
+                "s3_files_to_delete_count": len(target_s3_files),
+                "files_to_delete_count": len(target_files),
+                "message": f"Dry run: {len(patients)} patients and {len(reports)} reports would be deleted."
+            }
+
+        # 4. Generate complete backup PDF of affected patients
         try:
             pdf_bytes = pdf_generator.generate_patients_pdf(patients)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to generate backup PDF: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate verified backup PDF: {str(e)}")
 
-        # 5. Clean report files from disk
-        import glob
-        import os
-        for f in glob.glob("uploads/reports/*"):
-            try:
-                os.remove(f)
-            except Exception:
-                pass
-
-        # 6. Hard delete patient-related data ONLY for the identified patients
-        from backend.app.models.patient_test import PatientTest
-        from backend.app.models.report import Report
-
-        if patients:
-            patient_ids = [p.id for p in patients]
+        # 5. Database operations executed atomically
+        if patient_ids:
+            # Delete dependent relations cleanly
+            db.query(PatientTestResult).filter(PatientTestResult.patient_id.in_(patient_ids)).delete(synchronize_session=False)
             db.query(Report).filter(Report.patient_id.in_(patient_ids)).delete(synchronize_session=False)
             db.query(PatientTest).filter(PatientTest.patient_id.in_(patient_ids)).delete(synchronize_session=False)
+            db.query(PatientStatusHistory).filter(PatientStatusHistory.patient_id.in_(patient_ids)).delete(synchronize_session=False)
             db.query(Patient).filter(Patient.id.in_(patient_ids)).delete(synchronize_session=False)
+
+        audit_service.log(
+            db, "admin.delete_everything",
+            actor_user_id=current_user.id,
+            entity_type="system",
+            entity_id=current_user.id,
+            after={
+                "deleted_patients_count": len(patient_ids),
+                "deleted_reports_count": len(reports),
+                "files_cleaned": len(target_files)
+            }
+        )
+        # Commit database transaction before any file deletion
         db.commit()
+
+        # 6. Post-commit file cleanup: Delete ONLY verified linked files via storage adapter
+        from backend.app.core.storage import delete_file_object
+        for f in target_files:
+            try:
+                delete_file_object(f)
+            except Exception as f_err:
+                clean_logger.warning(f"Scoped file deletion notice for {f}: {f_err}")
+
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=f"Database wipe failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Database cleanup failed: {e}")
     finally:
         db.close()
 

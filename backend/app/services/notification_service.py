@@ -56,17 +56,15 @@ class EmailProvider(NotificationProvider):
         return " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())[:120]
 
     def _layout(self, *, preheader: str, eyebrow: str, title: str, content: str,
-                tone: str = "success", footer_note: str = "This is an automated message. Please do not reply to this email.") -> str:
-        """Render a conservative table-based layout with inline CSS for email clients."""
+                tone: str = "success", footer_note: str = "This is an automated message.") -> str:
+        """Render a modern, light, table-based email layout compatible with major email clients."""
         c = self.COLORS
         safe_preheader = self._escape(preheader)
         safe_eyebrow = self._escape(eyebrow)
         safe_title = self._escape(title)
         safe_footer = self._escape(footer_note)
-        if tone == "danger":
-            accent, soft = c["danger"], c["danger_soft"]
-        else:
-            accent, soft = c["primary"], c["primary_soft"]
+        accent = c["danger"] if tone == "danger" else c["primary"]
+        accent_soft = c["danger_soft"] if tone == "danger" else c["primary_soft"]
 
         return f'''<!doctype html>
 <html lang="en">
@@ -77,29 +75,36 @@ class EmailProvider(NotificationProvider):
   <meta name="supported-color-schemes" content="light">
   <title>{safe_title}</title>
 </head>
-<body style="margin:0;padding:0;background-color:{c['surface']};font-family:Arial,Helvetica,sans-serif;color:{c['ink']};-webkit-text-size-adjust:100%;">
+<body style="margin:0;padding:0;background:#F2F5F4;font-family:Arial,Helvetica,sans-serif;color:#172923;-webkit-text-size-adjust:100%;">
   <div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">{safe_preheader}</div>
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background-color:{c['surface']};border-collapse:collapse;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background:#F2F5F4;border-collapse:collapse;">
     <tr><td align="center" style="padding:28px 12px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;border-collapse:separate;border-spacing:0;background-color:{c['white']};border:1px solid {c['border']};border-radius:16px;overflow:hidden;">
-        <tr><td style="padding:0;background-color:{c['primary_dark']};">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:26px 28px 24px;">
-              <div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1.7px;text-transform:uppercase;color:#CDE8DC;">{safe_eyebrow}</div>
-              <div style="padding-top:8px;font-size:23px;line-height:30px;font-weight:700;letter-spacing:-0.35px;color:#FFFFFF;">{safe_title}</div>
-              <div style="padding-top:8px;font-size:13px;line-height:20px;color:#DDEDE6;">{self.BRAND}</div>
-            </td></tr>
-          </table>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;border-collapse:separate;border-spacing:0;background:#FFFFFF;border:1px solid #E0E8E4;border-radius:18px;overflow:hidden;">
+        <tr><td style="height:5px;line-height:5px;font-size:0;background:{accent};">&nbsp;</td></tr>
+        <tr><td style="padding:22px 28px 20px;background:#FFFFFF;border-bottom:1px solid #EAF0ED;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;width:100%;"><tr>
+            <td width="42" valign="middle" style="width:42px;padding-right:12px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="40" style="width:40px;border-collapse:separate;border-spacing:0;"><tr><td align="center" valign="middle" width="40" height="40" style="width:40px;height:40px;border-radius:12px;background:{accent_soft};color:{accent};font-size:20px;line-height:40px;font-weight:700;">A</td></tr></table>
+            </td>
+            <td valign="middle" style="font-size:15px;line-height:21px;font-weight:700;color:#18372D;">{self.BRAND}<div style="padding-top:3px;font-size:11px;line-height:16px;font-weight:400;color:#718078;">DIAGNOSTIC SERVICES</div></td>
+            <td align="right" valign="middle" style="font-size:10px;line-height:15px;font-weight:700;letter-spacing:.7px;color:{accent};text-transform:uppercase;">SECURE MESSAGE</td>
+          </tr></table>
         </td></tr>
-        <tr><td style="padding:30px 28px 26px;font-size:15px;line-height:25px;color:{c['ink']};">
+        <tr><td style="padding:30px 28px 8px;background:#FFFFFF;">
+          <div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:{accent};">{safe_eyebrow}</div>
+          <div style="padding-top:7px;font-size:27px;line-height:34px;font-weight:700;letter-spacing:-.5px;color:#17362C;">{safe_title}</div>
+        </td></tr>
+        <tr><td style="padding:18px 28px 30px;background:#FFFFFF;font-size:15px;line-height:25px;color:#24372F;">
           {content}
         </td></tr>
-        <tr><td style="padding:18px 28px 22px;background-color:#FAFCFB;border-top:1px solid {c['border']};">
-          <div style="font-size:12px;line-height:19px;color:{c['muted']};">{safe_footer}</div>
-          <div style="padding-top:8px;font-size:11px;line-height:17px;color:#87958E;">{self.BRAND} &middot; Secure notifications</div>
+        <tr><td style="padding:0 28px;background:#FFFFFF;"><div style="height:1px;line-height:1px;font-size:0;background:#E6ECE9;">&nbsp;</div></td></tr>
+        <tr><td style="padding:20px 28px 24px;background:#F8FAF9;">
+          <div style="font-size:12px;line-height:19px;color:#596B62;">{safe_footer}</div>
+          <div style="padding-top:13px;font-size:12px;line-height:18px;font-weight:700;letter-spacing:.25px;color:#31483D;">DO NOT REPLY TO THIS EMAIL.</div>
+          <div style="padding-top:5px;font-size:11px;line-height:17px;color:#7A8982;">This mailbox is used for automated notifications from {self.BRAND}.</div>
         </td></tr>
       </table>
-      <div style="max-width:560px;padding:14px 8px 0;font-size:11px;line-height:17px;color:#87958E;text-align:center;">If you believe this message was sent to you by mistake, you may ignore it unless the message describes an action you did not request.</div>
+      <div style="max-width:540px;padding:14px 10px 0;font-size:11px;line-height:17px;color:#7A8982;text-align:center;">Please keep account verification codes and diagnostic reports private. If this message was not intended for you, do not use any code or attachment.</div>
     </td></tr>
   </table>
 </body>
@@ -205,6 +210,7 @@ class EmailProvider(NotificationProvider):
             text_body = f"Hello {self._value(context, 'name', 'there')},\n\nYou have received a notification from Akriti Diagnostics Center. Sign in through your usual trusted application entry point if further action is required."
             html_body = self._layout(preheader="A notification from Akriti Diagnostics Center.", eyebrow="Notification", title="You have a notification", content=content)
 
+        text_body = text_body.rstrip() + "\n\nDO NOT REPLY TO THIS EMAIL. This mailbox is used for automated notifications from Akriti Diagnostics Center."
         return subject, html_body, text_body
 
 

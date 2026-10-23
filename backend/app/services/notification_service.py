@@ -26,27 +26,17 @@ class NotificationProvider(ABC):
 class EmailProvider(NotificationProvider):
     BRAND = "Akriti Diagnostics Center"
     BRAND_SHORT = "Akriti Diagnostics"
+    # A restrained clinical palette: deep blue ink, soft paper, and one calm teal accent.
     COLORS = {
-        "primary": "#176B55",
-        "primary_dark": "#104D3E",
-        "primary_soft": "#EAF5F0",
-        "ink": "#172923",
-        "muted": "#65756E",
-        "border": "#DCE8E2",
-        "surface": "#F5F8F6",
+        "ink": "#183243",
+        "body": "#344B59",
+        "muted": "#627581",
+        "accent": "#286C7B",
+        "accent_soft": "#F1F7F9",
+        "border": "#DCE6EB",
+        "page": "#F2F5F7",
+        "surface": "#F8FAFB",
         "white": "#FFFFFF",
-        "danger": "#A62B35",
-        "danger_soft": "#FFF1F1",
-        # --- additional design tokens for the redesigned templates ---
-        "page": "#EEF3F1",
-        "body": "#3F5148",
-        "primary_border": "#CFE6DA",
-        "danger_dark": "#7C1F27",
-        "danger_border": "#F0CCCC",
-        "warning": "#7A4E00",
-        "warning_accent": "#E0A100",
-        "warning_soft": "#FFF8E6",
-        "warning_border": "#F2DEAA",
     }
 
     @staticmethod
@@ -56,545 +46,178 @@ class EmailProvider(NotificationProvider):
 
     @staticmethod
     def _escape(value: Any) -> str:
-        """Escape dynamic values before inserting them into HTML email content."""
+        # Escape dynamic values before inserting them into HTML email content.
         import html
         return html.escape("" if value is None else str(value), quote=True)
 
     @staticmethod
     def _subject_value(value: Any) -> str:
-        """Prevent line breaks in dynamic subject fragments."""
+        # Prevent line breaks in dynamic subject fragments.
         return " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())[:120]
 
-    # ------------------------------------------------------------------
-    # Design system helpers
-    # NOTE: every helper below expects HTML-SAFE input. Dynamic values must
-    # already have been passed through self._escape() before being handed in.
-    # ------------------------------------------------------------------
-    OTP_VALIDITY_MINUTES = 5
-    FONT_STACK = "'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,'Helvetica Neue',Arial,sans-serif"
-    MONO_STACK = "'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono','Courier New',monospace"
-
-    # Responsive tweaks (clients that ignore <style> still get a clean 600px layout from inline styles).
-    _MOBILE_CSS = """
-    body, table, td, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
-    table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
-    a[x-apple-data-detectors] { color:inherit!important; text-decoration:none!important; }
-    @media only screen and (max-width:620px) {
-      .container { width:100%!important; max-width:100%!important; }
-      .outer-pad { padding:14px 8px!important; }
-      .px { padding-left:22px!important; padding-right:22px!important; }
-      .h1 { font-size:25px!important; line-height:32px!important; }
-      .code { font-size:30px!important; line-height:38px!important; letter-spacing:6px!important; padding-left:6px!important; }
-      .cred { font-size:17px!important; }
-      .hide-sm { display:none!important; }
-      .btn-td, .btn-a { display:block!important; width:100%!important; }
-    }
-    """
-
-    def _tone(self, tone: str) -> Dict[str, str]:
-        """Colour set for the 'success' (brand green) or 'danger' (red) tone."""
-        c = self.COLORS
-        if tone == "danger":
-            return {"accent": c["danger"], "dark": c["danger_dark"], "soft": c["danger_soft"],
-                    "border": c["danger_border"], "dash": "#E3A3A8"}
-        return {"accent": c["primary"], "dark": c["primary_dark"], "soft": c["primary_soft"],
-                "border": c["primary_border"], "dash": "#9CCDB8"}
-
-    @staticmethod
-    def _gap(px: int = 16) -> str:
-        return f'<div style="height:{px}px;line-height:{px}px;font-size:0;">&nbsp;</div>'
-
-    def _p(self, html_text: str, *, muted: bool = False, size: int = 15, mb: int = 14) -> str:
-        c = self.COLORS
-        color = c["muted"] if muted else c["body"]
-        line = int(size * 1.65)
-        return f'<p style="margin:0 0 {mb}px;font-size:{size}px;line-height:{line}px;color:{color};">{html_text}</p>'
-
-    def _code_card(self, *, label: str, code: str, tone: str = "success", note: str = "") -> str:
-        """Large, easy-to-read code box (OTP / confirmation code)."""
-        t = self._tone(tone)
-        pill = ""
-        if note:
-            pill = (
-                f'<tr><td align="center" style="padding:6px 16px 22px;">'
-                f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;"><tr>'
-                f'<td style="padding:5px 13px;border-radius:999px;background-color:#FFFFFF;border:1px solid {t["border"]};'
-                f'font-size:12px;line-height:16px;font-weight:700;color:{t["accent"]};">&#9201;&nbsp; {note}</td>'
-                f'</tr></table></td></tr>'
-            )
-        else:
-            pill = '<tr><td style="height:18px;line-height:18px;font-size:0;">&nbsp;</td></tr>'
-        return f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;">
-<tr><td style="background-color:{t['soft']};border:2px dashed {t['dash']};border-radius:16px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
-<tr><td align="center" style="padding:22px 16px 4px;font-size:11px;line-height:16px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;color:{t['accent']};">{label}</td></tr>
-<tr><td align="center" style="padding:6px 12px 6px;"><div class="code" style="font-family:{self.MONO_STACK};font-size:38px;line-height:46px;font-weight:700;letter-spacing:9px;padding-left:9px;color:{t['dark']};word-break:break-all;">{code}</div></td></tr>
-{pill}
-</table>
-</td></tr></table>'''
-
-    def _credential_card(self, *, label: str, value: str, hint: str = "") -> str:
-        """Monospace box for a temporary password / credential."""
-        c = self.COLORS
-        t = self._tone("success")
-        hint_html = f'<div style="padding-top:8px;font-size:12px;line-height:18px;color:{c["muted"]};">{hint}</div>' if hint else ""
-        return f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;">
-<tr><td style="padding:18px 20px;background-color:{c['surface']};border:1px solid {c['border']};border-left:4px solid {t['accent']};border-radius:12px;">
-<div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:{c['muted']};">{label}</div>
-<div class="cred" style="padding-top:8px;font-family:{self.MONO_STACK};font-size:20px;line-height:28px;font-weight:700;overflow-wrap:anywhere;word-break:break-all;color:{c['ink']};">{value}</div>
-{hint_html}
-</td></tr></table>'''
-
-    def _steps(self, title: str, items: list, tone: str = "success") -> str:
-        """Numbered 'what to do next' list so the user always knows the next action."""
-        c = self.COLORS
-        t = self._tone(tone)
-        rows = ""
-        for i, item in enumerate(items, 1):
-            pad = 0 if i == len(items) else 14
-            rows += f'''<tr>
-<td width="40" valign="top" style="width:40px;padding:0 0 {pad}px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="28" style="width:28px;border-collapse:separate;border-spacing:0;"><tr><td align="center" valign="middle" width="28" height="28" style="width:28px;height:28px;border-radius:14px;background-color:{t['accent']};color:#FFFFFF;font-size:13px;line-height:28px;font-weight:700;">{i}</td></tr></table>
-</td>
-<td valign="top" style="padding:3px 0 {pad}px;font-size:14px;line-height:22px;color:{c['ink']};">{item}</td>
-</tr>'''
-        return f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;">
-<tr><td style="padding:20px 22px;background-color:#FFFFFF;border:1px solid {c['border']};border-radius:14px;">
-<div style="padding-bottom:14px;font-size:11px;line-height:16px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:{c['muted']};">{title}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">{rows}</table>
-</td></tr></table>'''
-
-    def _callout(self, title: str, body: str, kind: str = "info") -> str:
-        """Highlighted note. kind: info | success | warning | danger."""
-        c = self.COLORS
-        palette = {
-            "info": (c["surface"], c["border"], c["primary"], c["ink"]),
-            "success": (c["primary_soft"], c["primary_border"], c["primary"], c["primary_dark"]),
-            "warning": (c["warning_soft"], c["warning_border"], c["warning_accent"], c["warning"]),
-            "danger": (c["danger_soft"], c["danger_border"], c["danger"], c["danger_dark"]),
-        }
-        bg, border, bar, title_color = palette.get(kind, palette["info"])
-        return f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;">
-<tr><td style="padding:14px 18px;background-color:{bg};border:1px solid {border};border-left:4px solid {bar};border-radius:12px;">
-<div style="font-size:14px;line-height:20px;font-weight:700;color:{title_color};">{title}</div>
-<div style="padding-top:4px;font-size:13px;line-height:21px;color:{c['body']};">{body}</div>
-</td></tr></table>'''
-
-    def _details_card(self, rows: list, tone: str = "success") -> str:
-        """Key / value summary card. rows = [(label, html_safe_value), ...]."""
-        c = self.COLORS
-        t = self._tone(tone)
-        body = ""
-        for idx, (label, value) in enumerate(rows):
-            border = "" if idx == len(rows) - 1 else f"border-bottom:1px solid {c['border']};"
-            body += f'''<tr>
-<td valign="top" style="padding:11px 0;{border}font-size:12px;line-height:18px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:{c['muted']};width:42%;">{label}</td>
-<td valign="top" align="right" style="padding:11px 0;{border}font-size:14px;line-height:20px;font-weight:700;color:{c['ink']};overflow-wrap:anywhere;">{value}</td>
-</tr>'''
-        return f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;">
-<tr><td style="padding:6px 20px;background-color:{c['surface']};border:1px solid {c['border']};border-top:3px solid {t['accent']};border-radius:12px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">{body}</table>
-</td></tr></table>'''
-
-    def _button(self, label: str, url: str, tone: str = "success") -> str:
-        """Bulletproof CTA button. Returns '' unless url is a valid http(s) link."""
-        url = str(url or "").strip()
-        if not url.lower().startswith(("https://", "http://")):
-            return ""
-        t = self._tone(tone)
-        safe_url = self._escape(url)
-        return f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;"><tr><td align="center">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;"><tr>
-<td class="btn-td" align="center" bgcolor="{t['accent']}" style="border-radius:12px;background-color:{t['accent']};">
-<a class="btn-a" href="{safe_url}" target="_blank" style="display:inline-block;padding:14px 34px;font-family:{self.FONT_STACK};font-size:15px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:12px;">{label}</a>
-</td></tr></table>
-</td></tr></table>'''
-
-    # ------------------------------------------------------------------
-    # Master layout
-    # ------------------------------------------------------------------
-    def _layout(self, *, preheader: str, eyebrow: str, title: str, content: str,
-                tone: str = "success", footer_note: str = "This is an automated message.",
-                icon: str = "&#128274;") -> str:
-        """Render a premium, mobile-friendly, table-based email layout compatible with major email clients.
-
-        `icon` is a trusted HTML entity (e.g. "&#128274;"), not user input.
-        """
-        c = self.COLORS
-        t = self._tone(tone)
+    def _layout(self, *, preheader: str, title: str, content: str,
+                footer_note: str = "This is an automated message from Akriti Diagnostics Center.") -> str:
+        # Email-client-safe premium layout built with tables and inline CSS.
         safe_preheader = self._escape(preheader)
-        safe_eyebrow = self._escape(eyebrow)
         safe_title = self._escape(title)
         safe_footer = self._escape(footer_note)
-        filler = "&zwnj;&nbsp;" * 45  # stops body copy leaking into the inbox preview line
-
+        c = self.COLORS
         return f'''<!doctype html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="x-apple-disable-message-reformatting">
-  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
   <meta name="color-scheme" content="light">
   <meta name="supported-color-schemes" content="light">
   <title>{safe_title}</title>
-  <style>{self._MOBILE_CSS}</style>
 </head>
-<body style="margin:0;padding:0;background-color:{c['page']};font-family:{self.FONT_STACK};color:{c['ink']};-webkit-text-size-adjust:100%;">
-  <div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;max-height:0;overflow:hidden;mso-hide:all;">{safe_preheader}{filler}</div>
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background-color:{c['page']};border-collapse:collapse;">
-    <tr><td class="outer-pad" align="center" style="padding:32px 14px;">
-      <table role="presentation" class="container" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;border-collapse:separate;border-spacing:0;background-color:#FFFFFF;border:1px solid {c['border']};border-radius:22px;overflow:hidden;box-shadow:0 10px 34px rgba(16,77,62,.10);">
-
-        <!-- Brand header -->
-        <tr><td class="px" bgcolor="{t['dark']}" style="padding:22px 36px;background-color:{t['dark']};background-image:linear-gradient(135deg,{t['dark']} 0%,{t['accent']} 100%);">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;width:100%;"><tr>
-            <td width="46" valign="middle" style="width:46px;padding-right:12px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="42" style="width:42px;border-collapse:separate;border-spacing:0;"><tr><td align="center" valign="middle" width="42" height="42" style="width:42px;height:42px;border-radius:13px;background-color:#FFFFFF;color:{t['dark']};font-size:22px;line-height:42px;font-weight:800;">A</td></tr></table>
-            </td>
-            <td valign="middle" style="font-size:16px;line-height:21px;font-weight:700;color:#FFFFFF;">{self.BRAND}<div style="padding-top:2px;font-size:10px;line-height:14px;font-weight:600;letter-spacing:1.6px;color:rgba(255,255,255,.78);">DIAGNOSTIC SERVICES</div></td>
-            <td class="hide-sm" align="right" valign="middle" style="font-size:10px;line-height:15px;font-weight:700;letter-spacing:1px;color:#FFFFFF;text-transform:uppercase;white-space:nowrap;">&#128274;&nbsp;Secure message</td>
-          </tr></table>
+<body style="margin:0;padding:0;background-color:{c['page']};font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:{c['body']};-webkit-text-size-adjust:100%;">
+  <div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;max-height:0;">{safe_preheader}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{c['page']}" style="width:100%;border-collapse:collapse;background-color:{c['page']};">
+    <tr><td align="center" style="padding:28px 12px 30px;">
+      <table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0" bgcolor="{c['white']}" style="width:100%;max-width:580px;border-collapse:separate;border-spacing:0;background-color:{c['white']};border:1px solid {c['border']};border-radius:15px;overflow:hidden;">
+        <tr><td height="4" bgcolor="{c['accent']}" style="height:4px;line-height:4px;font-size:0;background-color:{c['accent']};">&nbsp;</td></tr>
+        <tr><td style="padding:21px 26px 20px;background-color:{c['white']};border-bottom:1px solid {c['border']};">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;">
+            <tr>
+              <td width="42" valign="middle" style="width:42px;padding:0 12px 0 0;">
+                <table role="presentation" width="38" height="38" cellpadding="0" cellspacing="0" border="0" bgcolor="{c['accent_soft']}" style="width:38px;height:38px;border-collapse:separate;border-spacing:0;background-color:{c['accent_soft']};border:1px solid #D8E7EC;border-radius:10px;">
+                  <tr><td align="center" valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:38px;font-weight:700;color:{c['accent']};">A</td></tr>
+                </table>
+              </td>
+              <td valign="middle" style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;font-weight:700;letter-spacing:-0.2px;color:{c['ink']};">Akriti Diagnostics Center</td>
+            </tr>
+          </table>
         </td></tr>
-
-        <!-- Hero -->
-        <tr><td class="px" align="center" style="padding:38px 36px 6px;background-color:#FFFFFF;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="64" style="width:64px;border-collapse:separate;border-spacing:0;margin:0 auto;"><tr><td align="center" valign="middle" width="64" height="64" style="width:64px;height:64px;border-radius:32px;background-color:{t['soft']};border:1px solid {t['border']};font-size:28px;line-height:64px;">{icon}</td></tr></table>
-          <div style="padding-top:18px;font-size:11px;line-height:16px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:{t['accent']};">{safe_eyebrow}</div>
-          <div class="h1" style="padding-top:8px;font-size:29px;line-height:36px;font-weight:800;letter-spacing:-.5px;color:{c['ink']};">{safe_title}</div>
+        <tr><td style="padding:29px 30px 30px;background-color:{c['white']};font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
+          <h1 style="margin:0 0 17px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:25px;line-height:32px;font-weight:700;letter-spacing:-0.45px;color:{c['ink']};">{safe_title}</h1>
+          <div style="font-size:15px;line-height:25px;color:{c['body']};">{content}</div>
         </td></tr>
-
-        <!-- Body -->
-        <tr><td class="px" style="padding:24px 36px 34px;background-color:#FFFFFF;font-size:15px;line-height:25px;color:{c['body']};">
-          {content}
-        </td></tr>
-
-        <!-- Footer -->
-        <tr><td class="px" style="padding:24px 36px 26px;background-color:{c['surface']};border-top:1px solid {c['border']};">
-          <div style="font-size:12px;line-height:19px;color:{c['body']};">{safe_footer}</div>
-          <div style="padding-top:14px;font-size:11px;line-height:16px;font-weight:700;letter-spacing:.8px;color:{c['ink']};">DO NOT REPLY TO THIS EMAIL</div>
-          <div style="padding-top:4px;font-size:11px;line-height:17px;color:{c['muted']};">This mailbox is used only for automated notifications from {self.BRAND}.</div>
+        <tr><td style="padding:18px 26px 20px;background-color:{c['surface']};border-top:1px solid {c['border']};font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
+          <div style="font-size:12px;line-height:19px;color:{c['muted']};">{safe_footer}</div>
+          <div style="padding-top:7px;font-size:12px;line-height:18px;font-weight:700;letter-spacing:0.15px;color:{c['ink']};">DO NOT REPLY TO THIS EMAIL.</div>
         </td></tr>
       </table>
-      <div style="max-width:540px;padding:16px 10px 0;font-size:11px;line-height:17px;color:{c['muted']};text-align:center;">Please keep verification codes, passwords and diagnostic reports private. If this message was not intended for you, do not use any code or attachment.</div>
     </td></tr>
   </table>
 </body>
 </html>'''
 
-    # ------------------------------------------------------------------
-    # Event templates
-    # ------------------------------------------------------------------
-    def _render_template(self, event_type: str, context: Dict[str, Any]):
-        """Return subject, HTML and plain-text bodies for supported email events."""
+    def _code_panel(self, code: str, label: str = "Your one-time code") -> str:
+        # Compact code focus without loud blocks or unnecessary decoration.
         c = self.COLORS
-        minutes = self.OTP_VALIDITY_MINUTES
+        safe_label = self._escape(label)
+        safe_code = self._escape(code)
+        return f'''<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:22px 0 18px;">
+  <tr><td align="center" bgcolor="{c['accent_soft']}" style="padding:21px 14px 20px;background-color:{c['accent_soft']};border:1px solid #D5E5EA;border-radius:11px;text-align:center;">
+    <div style="text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:600;color:{c['muted']};">{safe_label}</div>
+    <div style="padding-top:7px;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:30px;line-height:39px;font-weight:700;letter-spacing:5px;color:{c['ink']};overflow-wrap:anywhere;">{safe_code}</div>
+    <div style="padding-top:8px;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:{c['muted']};">Valid for 5 minutes</div>
+  </td></tr>
+</table>'''
 
+    def _render_template(self, event_type: str, context: Dict[str, Any]):
+        # Return subject, HTML and plain-text bodies for each notification event.
+        c = self.COLORS
         raw_name = self._value(context, "name", "there").strip() or "there"
-        raw_patient_name = self._value(context, "patient_name", "Patient").strip() or "Patient"
-        raw_patient_code = self._value(context, "patient_code").strip() or "Not provided"
-        raw_otp = self._value(context, "otp").strip()
-        raw_temp_password = self._value(context, "temp_password").strip()
-
         name = self._escape(raw_name)
+        raw_patient_name = self._value(context, "patient_name", "Patient").strip() or "Patient"
         patient_name = self._escape(raw_patient_name)
+        raw_patient_code = self._value(context, "patient_code").strip()
         patient_code = self._escape(raw_patient_code)
+        raw_otp = self._value(context, "otp").strip()
         otp = self._escape(raw_otp)
+        raw_temp_password = self._value(context, "temp_password").strip()
         temp_password = self._escape(raw_temp_password)
 
-        expiry_pill = f"Expires in {minutes} minutes"
-        never_share = ("Akriti Diagnostics will <strong>never</strong> ask you for this code by phone, chat or email. "
-                       "Please don't share it with anyone.")
-
         if event_type == "otp":
-            subject = "Your secure verification code | Akriti Diagnostics"
-            content = (
-                self._p(f"Hello {name},", mb=6)
-                + self._p("You asked for a one-time code to verify a request on your Akriti Diagnostics account. Here it is:", mb=20)
-                + self._code_card(label="Your one-time code", code=otp, note=expiry_pill)
-                + self._gap(20)
-                + self._steps("What to do next", [
-                    "Go back to the screen where you asked for this code.",
-                    "Type the code in <strong>exactly as shown</strong> above.",
-                    f"Submit it within <strong>{minutes} minutes</strong>. After that, simply request a new code.",
-                ])
-                + self._gap(20)
-                + self._callout("Keep this code private", never_share, "warning")
-                + self._gap(12)
-                + self._callout("Didn't request this?", "You can safely ignore this email and do not use the code.", "info")
-            )
-            text_body = "\n".join([
-                f"Hello {raw_name},",
-                "",
-                f"Your one-time verification code is: {raw_otp}",
-                f"This code expires in {minutes} minutes.",
-                "",
-                "What to do next:",
-                "1. Go back to the screen where you asked for this code.",
-                "2. Type the code in exactly as shown.",
-                f"3. Submit it within {minutes} minutes. After that, request a new code.",
-                "",
-                "Keep it private: Akriti Diagnostics will never ask you for this code by phone, chat or email. Do not share it with anyone.",
-                "",
-                "Didn't request this? You can safely ignore this email and do not use the code.",
-            ])
-            html_body = self._layout(preheader=f"Your secure verification code is ready. It expires in {minutes} minutes.",
-                                     eyebrow="Account security", title="Your verification code", content=content,
-                                     icon="&#128272;")
+            subject = "Your verification code | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 8px;font-weight:600;color:{c['ink']};">Hello {name},</p>
+<p style="margin:0;color:{c['body']};">Use this code to complete verification in Akriti Diagnostics Center.</p>
+{self._code_panel(raw_otp)}
+<p style="margin:0 0 11px;font-size:13px;line-height:21px;color:{c['muted']};">For your security, do not share this code with anyone.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">Didn't request a code? You can safely ignore this email.</p>'''
+            text_body = f"Hello {raw_name},\n\nYour verification code is: {raw_otp}\n\nUse it in Akriti Diagnostics Center to complete verification. It is valid for 5 minutes. Do not share it with anyone. If you did not request it, ignore this email."
+            html_body = self._layout(preheader="Your verification code is inside. It is valid for 5 minutes.", title="Your verification code", content=content)
 
         elif event_type == "password_reset":
-            subject = "Password reset verification | Akriti Diagnostics"
-            content = (
-                self._p(f"Hello {name},", mb=6)
-                + self._p("We received a request to reset the password for your account. Use the code below to continue.", mb=20)
-                + self._code_card(label="Password reset code", code=otp, note=expiry_pill)
-                + self._gap(20)
-                + self._steps("How to reset your password", [
-                    "Return to the <strong>Reset password</strong> screen.",
-                    "Enter the code above exactly as shown.",
-                    "Choose a <strong>new, strong password</strong> when asked, then sign in with it.",
-                ])
-                + self._gap(20)
-                + self._callout("Keep this code private", never_share, "warning")
-                + self._gap(12)
-                + self._callout("Didn't ask to reset your password?",
-                                "Do not use the code. Your password will stay as it is. If you think someone else is trying to access your account, "
-                                "contact your administrator through a trusted channel.", "info")
-            )
-            text_body = "\n".join([
-                f"Hello {raw_name},",
-                "",
-                "We received a request to reset the password for your account.",
-                f"Your password reset code is: {raw_otp}",
-                f"This code expires in {minutes} minutes.",
-                "",
-                "How to reset your password:",
-                "1. Return to the Reset password screen.",
-                "2. Enter the code exactly as shown.",
-                "3. Choose a new, strong password when asked, then sign in with it.",
-                "",
-                "Keep it private: never share this code with anyone.",
-                "",
-                "Didn't ask to reset your password? Do not use the code. If you suspect someone is trying to access your account, contact your administrator through a trusted channel.",
-            ])
-            html_body = self._layout(preheader=f"Complete your password reset securely. The code expires in {minutes} minutes.",
-                                     eyebrow="Account security", title="Reset your password", content=content,
-                                     icon="&#128273;")
+            subject = "Password reset code | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 8px;font-weight:600;color:{c['ink']};">Hello {name},</p>
+<p style="margin:0;color:{c['body']};">We received a request to reset your password. Enter the code below on the password-reset screen to continue.</p>
+{self._code_panel(raw_otp, "Password reset code")}
+<p style="margin:0 0 11px;font-size:13px;line-height:21px;color:{c['muted']};">This code expires in 5 minutes. Keep it private and do not forward this email.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you didn't request a password reset, don't use the code. Contact your administrator through a trusted channel if you're concerned about your account.</p>'''
+            text_body = f"Hello {raw_name},\n\nYour password reset code is: {raw_otp}\n\nEnter it on the password-reset screen. It expires in 5 minutes. Do not share it. If you did not request a reset, do not use the code and contact your administrator through a trusted channel if concerned."
+            html_body = self._layout(preheader="Use this code on the password-reset screen. It expires in 5 minutes.", title="Reset your password", content=content)
 
         elif event_type == "password_change":
-            subject = "Password change verification | Akriti Diagnostics"
-            content = (
-                self._p(f"Hello {name},", mb=6)
-                + self._p("A request was made to change your account password. Enter the code below to confirm it was you.", mb=20)
-                + self._code_card(label="Verification code", code=otp, note=expiry_pill)
-                + self._gap(20)
-                + self._steps("How to confirm the change", [
-                    "Go back to the <strong>Change password</strong> screen.",
-                    "Enter the code above exactly as shown.",
-                    f"Complete the step within <strong>{minutes} minutes</strong>.",
-                ])
-                + self._gap(20)
-                + self._callout("Keep this code private", never_share, "warning")
-                + self._gap(12)
-                + self._callout("Didn't request this change?",
-                                "Do not use the code, and contact your administrator through a trusted channel so your account can be checked.", "info")
-            )
-            text_body = "\n".join([
-                f"Hello {raw_name},",
-                "",
-                "A request was made to change your account password.",
-                f"Your password-change verification code is: {raw_otp}",
-                f"This code expires in {minutes} minutes.",
-                "",
-                "How to confirm the change:",
-                "1. Go back to the Change password screen.",
-                "2. Enter the code exactly as shown.",
-                f"3. Complete the step within {minutes} minutes.",
-                "",
-                "Keep it private: never share this code with anyone.",
-                "",
-                "Didn't request this change? Do not use the code and contact your administrator through a trusted channel.",
-            ])
-            html_body = self._layout(preheader="Confirm your password-change request with the code inside.",
-                                     eyebrow="Account security", title="Confirm password change", content=content,
-                                     icon="&#128260;")
+            subject = "Confirm your password change | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 8px;font-weight:600;color:{c['ink']};">Hello {name},</p>
+<p style="margin:0;color:{c['body']};">Enter this code in the app to confirm your password-change request.</p>
+{self._code_panel(raw_otp, "Password change code")}
+<p style="margin:0 0 11px;font-size:13px;line-height:21px;color:{c['muted']};">The code expires in 5 minutes. Do not share it with anyone.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not request this change, do not use the code. Contact your administrator through a trusted channel.</p>'''
+            text_body = f"Hello {raw_name},\n\nYour password-change code is: {raw_otp}\n\nEnter it in the app to confirm your request. It expires in 5 minutes. Do not share it. If you did not request this change, do not use the code and contact your administrator through a trusted channel."
+            html_body = self._layout(preheader="Confirm your password-change request with this code.", title="Confirm password change", content=content)
 
         elif event_type == "delete_verify":
-            subject = "Confirmation required for a sensitive data-deletion request"
-            content = (
-                self._callout("Sensitive action: patient data deletion",
-                              "Please read this carefully. Continue only if <strong>you</strong> started this request in the application.", "danger")
-                + self._gap(20)
-                + self._p(f"Hello {name},", mb=6)
-                + self._p("A request was made to verify the deletion of patient data. To confirm that you started it, enter the code below.", mb=20)
-                + self._code_card(label="Confirmation code", code=otp, tone="danger", note=expiry_pill)
-                + self._gap(20)
-                + self._steps("Before you continue", [
-                    "Check that <strong>you</strong> started this deletion request in the application.",
-                    "If yes, enter the code above exactly as shown.",
-                    "If not, <strong>stop here</strong>, do not use the code, and contact your administrator.",
-                ], tone="danger")
-                + self._gap(20)
-                + self._callout("Good to know",
-                                "This code only verifies the request. It does not mean the deletion has already been completed.", "info")
-                + self._gap(12)
-                + self._callout("Didn't start this action?",
-                                "Do not share or use the code. Contact your administrator through a trusted channel immediately.", "danger")
-            )
-            text_body = "\n".join([
-                "SENSITIVE ACTION: PATIENT DATA DELETION",
-                "",
-                f"Hello {raw_name},",
-                "",
-                "A request was made to verify the deletion of patient data. Use the code below ONLY if you started this request in the application.",
-                f"Your confirmation code is: {raw_otp}",
-                f"This code expires in {minutes} minutes.",
-                "",
-                "Before you continue:",
-                "1. Check that you started this deletion request in the application.",
-                "2. If yes, enter the code exactly as shown.",
-                "3. If not, stop here, do not use the code, and contact your administrator.",
-                "",
-                "Good to know: this code only verifies the request. It does not mean the deletion has already been completed.",
-                "",
-                "Didn't start this action? Do not share or use the code. Contact your administrator through a trusted channel immediately.",
-            ])
-            html_body = self._layout(preheader="Action required: confirm a sensitive deletion request, only if it was you.",
-                                     eyebrow="Security confirmation", title="Confirm sensitive action", content=content,
-                                     tone="danger", footer_note="Security notice: never share this verification code.",
-                                     icon="&#9888;&#65039;")
+            subject = "Confirm your deletion request | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 8px;font-weight:600;color:{c['ink']};">Hello {name},</p>
+<p style="margin:0 0 16px;color:{c['body']};">A verification code was requested for a patient-data deletion action. Only continue if you started this request in the application.</p>
+{self._code_panel(raw_otp, "Deletion confirmation code")}
+<p style="margin:0 0 11px;font-size:13px;line-height:21px;color:{c['muted']};">This code expires in 5 minutes. Entering it verifies the request; it does not, by itself, mean deletion has completed.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not start this request, do not use or share the code. Contact your administrator through a trusted channel immediately.</p>'''
+            text_body = f"Hello {raw_name},\n\nA code was requested to verify a patient-data deletion action: {raw_otp}\n\nOnly use it if you started the request in the application. It expires in 5 minutes. The code does not itself confirm that deletion is complete. If you did not start this request, do not use or share the code and contact your administrator."
+            html_body = self._layout(preheader="A verification code was requested for a sensitive action.", title="Confirm deletion request", content=content, footer_note="This email contains a sensitive verification code. Keep it private.")
 
         elif event_type == "welcome_staff":
-            subject = "Your Akriti Diagnostics staff account"
-            login_button = self._button("Open the staff portal", context.get("login_url"))
-            content = (
-                self._p(f"Welcome, {name}!", mb=6)
-                + self._p("Your staff account at Akriti Diagnostics Center is ready. Use the temporary password below for your first sign-in.", mb=20)
-                + self._credential_card(label="Temporary password", value=temp_password,
-                                        hint="Select the password and copy it exactly. It is case-sensitive.")
-                + self._gap(20)
-                + (login_button + self._gap(20) if login_button else "")
-                + self._steps("Getting started", [
-                    "Open the Akriti Diagnostics staff portal using the link shared by your administrator.",
-                    "Sign in with your account details and the <strong>temporary password</strong> above.",
-                    "Change the temporary password when prompted and pick one you don't use anywhere else.",
-                ])
-                + self._gap(20)
-                + self._callout("Keep your credentials safe",
-                                "Never share your password and do not forward this email. Delete it once you have signed in and changed your password.", "warning")
-                + self._gap(12)
-                + self._callout("Not expecting this account?",
-                                "Please don't sign in. Contact your administrator through a trusted channel first.", "info")
-            )
-            text_body = "\n".join([
-                f"Welcome, {raw_name}!",
-                "",
-                "Your staff account at Akriti Diagnostics Center is ready.",
-                f"Temporary password: {raw_temp_password}",
-                "",
-                "Getting started:",
-                "1. Open the Akriti Diagnostics staff portal using the link shared by your administrator.",
-                "2. Sign in with your account details and the temporary password above.",
-                "3. Change the temporary password when prompted and pick one you don't use anywhere else.",
-                "",
-                "Keep your credentials safe: never share your password and do not forward this email.",
-                "",
-                "Not expecting this account? Please don't sign in. Contact your administrator through a trusted channel first.",
-            ])
-            html_body = self._layout(preheader="Your staff account is ready. Your temporary password is inside.",
-                                     eyebrow="Staff account", title="Welcome to the team", content=content,
-                                     footer_note="This message contains an initial sign-in credential. Store it securely and do not forward this email.",
-                                     icon="&#128075;")
+            subject = "Your staff account is ready | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 8px;font-weight:600;color:{c['ink']};">Welcome, {name}.</p>
+<p style="margin:0 0 18px;color:{c['body']};">Your staff account has been created. Use the temporary credential below to sign in to the system.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 18px;">
+  <tr><td bgcolor="{c['surface']}" style="padding:16px 18px;background-color:{c['surface']};border:1px solid {c['border']};border-radius:10px;">
+    <div style="font-size:12px;line-height:18px;color:{c['muted']};">Temporary password</div>
+    <div style="padding-top:7px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;font-weight:700;color:{c['ink']};overflow-wrap:anywhere;word-break:break-word;">{temp_password}</div>
+  </td></tr>
+</table>
+<p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">Change this password after signing in if prompted. Never share it or reuse it on another service.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you were not expecting this account, contact your administrator before signing in.</p>'''
+            text_body = f"Welcome, {raw_name}.\n\nYour staff account has been created. Temporary password: {raw_temp_password}\n\nChange this password after signing in if prompted. Never share it or reuse it on another service. If you were not expecting this account, contact your administrator before signing in."
+            html_body = self._layout(preheader="Your Akriti Diagnostics staff account has been created.", title="Your staff account is ready", content=content, footer_note="This email contains a temporary sign-in credential. Store it securely.")
 
         elif event_type in ("report_ready", "report_released"):
             subject = "Your diagnostic report is ready | Akriti Diagnostics"
             has_attachment = bool(context.get("attachment_bytes") and context.get("attachment_name"))
-            attachment_name = self._escape(self._value(context, "attachment_name").strip())
-            registered_date = self._escape(self._value(context, "registered_date").strip())
-
-            rows = [("Patient ID", patient_code), ("Patient name", patient_name)]
-            if registered_date:
-                rows.append(("Registered on", registered_date))
-            if has_attachment and attachment_name:
-                rows.append(("Report file", attachment_name))
-
-            if has_attachment:
-                access_block = (
-                    self._callout("Your report is attached", "Open the PDF attached to this email to view your report. "
-                                  "We suggest saving a copy somewhere safe.", "success")
-                    + self._gap(12)
-                )
-                access_text = "Your report is attached to this email as a PDF. Please save a copy somewhere safe."
+            if raw_patient_code:
+                report_reference = f'''<tr><td style="padding:13px 16px;border-bottom:1px solid {c['border']};font-size:13px;line-height:20px;color:{c['muted']};">Patient ID</td><td align="right" style="padding:13px 16px;border-bottom:1px solid {c['border']};font-size:14px;line-height:20px;font-weight:700;color:{c['ink']};">{patient_code}</td></tr>'''
             else:
-                access_block = (
-                    self._callout("Collect your report", "Please collect your report from the laboratory reception desk. "
-                                  "Keep your <strong>Patient ID</strong> above handy.", "success")
-                    + self._gap(12)
-                )
-                access_text = "Please collect your report from the laboratory reception desk. Keep your Patient ID handy."
-
-            content = (
-                self._p(f"Dear {patient_name},", mb=6)
-                + self._p("Good news: your diagnostic report has been prepared and is ready for you.", mb=20)
-                + self._details_card(rows)
-                + self._gap(20)
-                + access_block
-                + self._callout("Keep it confidential",
-                                "Your report contains personal health information. Share it only with your doctor or another trusted healthcare professional.", "warning")
-                + self._gap(12)
-                + self._callout("Need help or a printed copy?",
-                                "Contact the laboratory reception and we'll be glad to assist. "
-                                "If this report reached you by mistake, please let the laboratory know and delete this email.", "info")
-            )
-            text_lines = [
-                f"Dear {raw_patient_name},",
-                "",
-                "Good news: your diagnostic report has been prepared and is ready for you.",
-                "",
-                f"Patient ID: {raw_patient_code}",
-                f"Patient name: {raw_patient_name}",
-            ]
-            raw_registered = self._value(context, "registered_date").strip()
-            if raw_registered:
-                text_lines.append(f"Registered on: {raw_registered}")
-            text_lines += [
-                "",
-                access_text,
-                "",
-                "Keep it confidential: your report contains personal health information. Share it only with your doctor or another trusted healthcare professional.",
-                "",
-                "Need help or a printed copy? Contact the laboratory reception. If this report reached you by mistake, please let the laboratory know and delete this email.",
-            ]
-            text_body = "\n".join(text_lines)
-            html_body = self._layout(preheader="Good news: your diagnostic report is ready.",
-                                     eyebrow="Diagnostic services", title="Your report is ready", content=content,
-                                     footer_note="Confidential: this email and any attached report are intended only for the recipient. If received in error, contact the laboratory and delete the message.",
-                                     icon="&#128196;")
+                report_reference = ""
+            if has_attachment:
+                report_message = "Your diagnostic report is attached as a PDF. Open the attachment to view your report."
+            else:
+                report_message = "Your diagnostic report has been prepared. Please contact the laboratory reception to receive a copy."
+            content = f'''<p style="margin:0 0 8px;font-weight:600;color:{c['ink']};">Dear {patient_name},</p>
+<p style="margin:0 0 18px;color:{c['body']};">Your diagnostic report is ready.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 18px;border:1px solid {c['border']};border-radius:10px;">
+  {report_reference}
+  <tr><td style="padding:13px 16px;font-size:13px;line-height:20px;color:{c['muted']};">Status</td><td align="right" style="padding:13px 16px;font-size:14px;line-height:20px;font-weight:700;color:{c['accent']};">Ready</td></tr>
+</table>
+<p style="margin:0 0 13px;color:{c['body']};">{report_message}</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">Please keep your report private and share it only with the appropriate healthcare professional. If you received this email by mistake, contact the laboratory through a trusted channel.</p>'''
+            attachment_text = "Your report PDF is attached to this email." if has_attachment else "Contact the laboratory reception to receive a copy of your report."
+            text_body = f"Dear {raw_patient_name},\n\nYour diagnostic report is ready.\n" + (f"Patient ID: {raw_patient_code}\n" if raw_patient_code else "") + f"Status: Ready\n\n{attachment_text}\n\nPlease keep your report private and share it only with the appropriate healthcare professional. If you received this email by mistake, contact the laboratory through a trusted channel."
+            html_body = self._layout(preheader="Your diagnostic report is ready.", title="Your report is ready", content=content, footer_note="Confidential: this message and any attached report are intended only for the recipient.")
 
         else:
-            # Never dump the full context into an email; it may contain sensitive data.
+            # Do not expose arbitrary context values in generic notification emails.
             subject = "A notification from Akriti Diagnostics"
-            content = (
-                self._p(f"Hello {name},", mb=6)
-                + self._p("You have a new notification from Akriti Diagnostics Center.", mb=20)
-                + self._callout("What should I do?",
-                                "If any action is needed, please sign in through your usual trusted application entry point. "
-                                "No action is required from this email alone.", "info")
-            )
-            text_body = "\n".join([
-                f"Hello {raw_name},",
-                "",
-                "You have a new notification from Akriti Diagnostics Center.",
-                "If any action is needed, please sign in through your usual trusted application entry point. No action is required from this email alone.",
-            ])
-            html_body = self._layout(preheader="A notification from Akriti Diagnostics Center.",
-                                     eyebrow="Notification", title="You have a notification", content=content,
-                                     icon="&#128276;")
+            content = f'''<p style="margin:0 0 8px;font-weight:600;color:{c['ink']};">Hello {name},</p>
+<p style="margin:0;color:{c['body']};">You have received a notification from Akriti Diagnostics Center. If action is needed, sign in through your usual trusted application entry point.</p>'''
+            text_body = f"Hello {raw_name},\n\nYou have received a notification from Akriti Diagnostics Center. If action is needed, sign in through your usual trusted application entry point."
+            html_body = self._layout(preheader="A notification from Akriti Diagnostics Center.", title="You have a notification", content=content)
 
-        text_body = text_body.rstrip() + "\n\nDO NOT REPLY TO THIS EMAIL. This mailbox is used for automated notifications from Akriti Diagnostics Center."
+        text_body = text_body.rstrip() + "\n\nThis is an automated message from Akriti Diagnostics Center.\nDO NOT REPLY TO THIS EMAIL."
         return subject, html_body, text_body
-
 
     def send(self, event_type: str, recipient_email: str, context: Dict[str, Any]) -> bool:
         try:

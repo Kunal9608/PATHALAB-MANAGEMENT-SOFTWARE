@@ -24,6 +24,190 @@ class NotificationProvider(ABC):
 
 
 class EmailProvider(NotificationProvider):
+    BRAND = "Akriti Diagnostics Center"
+    BRAND_SHORT = "Akriti Diagnostics"
+    COLORS = {
+        "primary": "#176B55",
+        "primary_dark": "#104D3E",
+        "primary_soft": "#EAF5F0",
+        "ink": "#172923",
+        "muted": "#65756E",
+        "border": "#DCE8E2",
+        "surface": "#F5F8F6",
+        "white": "#FFFFFF",
+        "danger": "#A62B35",
+        "danger_soft": "#FFF1F1",
+    }
+
+    @staticmethod
+    def _value(context: Dict[str, Any], key: str, default: str = "") -> str:
+        value = context.get(key, default)
+        return default if value is None else str(value)
+
+    @staticmethod
+    def _escape(value: Any) -> str:
+        """Escape dynamic values before inserting them into HTML email content."""
+        import html
+        return html.escape("" if value is None else str(value), quote=True)
+
+    @staticmethod
+    def _subject_value(value: Any) -> str:
+        """Prevent line breaks in dynamic subject fragments."""
+        return " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())[:120]
+
+    def _layout(self, *, preheader: str, eyebrow: str, title: str, content: str,
+                tone: str = "success", footer_note: str = "This is an automated message. Please do not reply to this email.") -> str:
+        """Render a conservative table-based layout with inline CSS for email clients."""
+        c = self.COLORS
+        safe_preheader = self._escape(preheader)
+        safe_eyebrow = self._escape(eyebrow)
+        safe_title = self._escape(title)
+        safe_footer = self._escape(footer_note)
+        if tone == "danger":
+            accent, soft = c["danger"], c["danger_soft"]
+        else:
+            accent, soft = c["primary"], c["primary_soft"]
+
+        return f'''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>{safe_title}</title>
+</head>
+<body style="margin:0;padding:0;background-color:{c['surface']};font-family:Arial,Helvetica,sans-serif;color:{c['ink']};-webkit-text-size-adjust:100%;">
+  <div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">{safe_preheader}</div>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background-color:{c['surface']};border-collapse:collapse;">
+    <tr><td align="center" style="padding:28px 12px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;border-collapse:separate;border-spacing:0;background-color:{c['white']};border:1px solid {c['border']};border-radius:16px;overflow:hidden;">
+        <tr><td style="padding:0;background-color:{c['primary_dark']};">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:26px 28px 24px;">
+              <div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1.7px;text-transform:uppercase;color:#CDE8DC;">{safe_eyebrow}</div>
+              <div style="padding-top:8px;font-size:23px;line-height:30px;font-weight:700;letter-spacing:-0.35px;color:#FFFFFF;">{safe_title}</div>
+              <div style="padding-top:8px;font-size:13px;line-height:20px;color:#DDEDE6;">{self.BRAND}</div>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:30px 28px 26px;font-size:15px;line-height:25px;color:{c['ink']};">
+          {content}
+        </td></tr>
+        <tr><td style="padding:18px 28px 22px;background-color:#FAFCFB;border-top:1px solid {c['border']};">
+          <div style="font-size:12px;line-height:19px;color:{c['muted']};">{safe_footer}</div>
+          <div style="padding-top:8px;font-size:11px;line-height:17px;color:#87958E;">{self.BRAND} &middot; Secure notifications</div>
+        </td></tr>
+      </table>
+      <div style="max-width:560px;padding:14px 8px 0;font-size:11px;line-height:17px;color:#87958E;text-align:center;">If you believe this message was sent to you by mistake, you may ignore it unless the message describes an action you did not request.</div>
+    </td></tr>
+  </table>
+</body>
+</html>'''
+
+    def _render_template(self, event_type: str, context: Dict[str, Any]):
+        """Return subject, HTML and plain-text bodies for supported email events."""
+        c = self.COLORS
+        name = self._escape(self._value(context, "name", "there").strip() or "there")
+        patient_name = self._escape(self._value(context, "patient_name", "Patient").strip() or "Patient")
+        patient_code = self._escape(self._value(context, "patient_code").strip() or "Not provided")
+        otp = self._escape(self._value(context, "otp").strip())
+        temp_password = self._escape(self._value(context, "temp_password").strip())
+
+        if event_type == "otp":
+            subject = "Your secure verification code | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 14px;">Hello {name},</p>
+<p style="margin:0 0 20px;color:{c['muted']};">Use this one-time password to verify your request. For your security, the code is time-limited.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['primary_soft']};border:1px solid #C9E3D7;border-radius:12px;">
+<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['primary']};">One-time password</div>
+<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['primary_dark']};">{otp}</div>
+</td></tr></table>
+<p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. Do not share it with anyone, including someone claiming to be from support.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not request this code, you can ignore this email.</p>'''
+            text_body = f"Hello {self._value(context, 'name', 'there')},\n\nYour one-time verification code is: {self._value(context, 'otp')}\n\nThis code is valid for 5 minutes. Do not share it with anyone. If you did not request it, ignore this email."
+            html_body = self._layout(preheader="Your secure verification code is ready.", eyebrow="Account security", title="Verify your request", content=content)
+
+        elif event_type == "password_reset":
+            subject = "Password reset verification | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 14px;">Hello {name},</p>
+<p style="margin:0 0 20px;color:{c['muted']};">We received a request to reset your account password. Enter the one-time code below in the password-reset screen to continue.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['primary_soft']};border:1px solid #C9E3D7;border-radius:12px;">
+<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['primary']};">Password reset code</div>
+<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['primary_dark']};">{otp}</div>
+</td></tr></table>
+<p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. Never share it with anyone.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not request a password reset, do not use the code. If you suspect someone has accessed your account, contact your administrator through a trusted channel.</p>'''
+            text_body = f"Hello {self._value(context, 'name', 'there')},\n\nYour password reset verification code is: {self._value(context, 'otp')}\n\nThis code is valid for 5 minutes. Never share it. If you did not request a reset, do not use the code and contact your administrator through a trusted channel if concerned."
+            html_body = self._layout(preheader="Complete your password reset securely.", eyebrow="Account security", title="Reset your password", content=content)
+
+        elif event_type == "password_change":
+            subject = "Password change verification | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 14px;">Hello {name},</p>
+<p style="margin:0 0 20px;color:{c['muted']};">Use the verification code below to confirm your password-change request.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['primary_soft']};border:1px solid #C9E3D7;border-radius:12px;">
+<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['primary']};">Verification code</div>
+<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['primary_dark']};">{otp}</div>
+</td></tr></table>
+<p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. Do not share it with anyone.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not request this change, do not use the code and contact your administrator through a trusted channel.</p>'''
+            text_body = f"Hello {self._value(context, 'name', 'there')},\n\nYour password-change verification code is: {self._value(context, 'otp')}\n\nThis code is valid for 5 minutes. Do not share it. If you did not request this change, contact your administrator through a trusted channel."
+            html_body = self._layout(preheader="Confirm your password-change request.", eyebrow="Account security", title="Confirm password change", content=content)
+
+        elif event_type == "delete_verify":
+            subject = "Confirmation required for a sensitive data-deletion request"
+            content = f'''<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td style="padding:14px 16px;background-color:{c['danger_soft']};border:1px solid #F0CCCC;border-radius:10px;">
+<div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:{c['danger']};">Sensitive action</div>
+<div style="padding-top:4px;font-size:14px;line-height:22px;font-weight:700;color:#76232A;">Patient data deletion verification</div>
+</td></tr></table>
+<p style="margin:0 0 18px;">Hello {name},</p>
+<p style="margin:0 0 20px;color:{c['muted']};">A request was made to verify a sensitive patient-data deletion action. Enter the one-time code below only if you initiated this request in the application.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td align="center" style="padding:22px 14px;background-color:{c['danger_soft']};border:1px solid #F0CCCC;border-radius:12px;">
+<div style="font-size:11px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:{c['danger']};">Confirmation code</div>
+<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;font-weight:700;letter-spacing:7px;color:{c['danger']};">{otp}</div>
+</td></tr></table>
+<p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">This code is valid for 5 minutes. It verifies the request; it does not itself confirm that deletion has completed.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you did not initiate this action, do not share or use the code. Contact your administrator through a trusted channel immediately.</p>'''
+            text_body = f"Sensitive action verification\n\nHello {self._value(context, 'name', 'there')},\nA request was made to verify a patient-data deletion action. Use this code only if you initiated the request: {self._value(context, 'otp')}\n\nThe code is valid for 5 minutes. It does not itself mean deletion has completed. If you did not initiate this action, do not use or share the code and contact your administrator."
+            html_body = self._layout(preheader="Verification is required for a sensitive deletion request.", eyebrow="Security confirmation", title="Confirm sensitive action", content=content, tone="danger", footer_note="Security notice: never share this verification code.")
+
+        elif event_type == "welcome_staff":
+            subject = "Your Akriti Diagnostics staff account"
+            content = f'''<p style="margin:0 0 14px;">Welcome, {name}.</p>
+<p style="margin:0 0 18px;color:{c['muted']};">Your staff profile has been created in the Akriti Diagnostics Center system. Use the initial sign-in credential supplied by your administrator to access the portal.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td style="padding:16px 18px;background-color:{c['surface']};border:1px solid {c['border']};border-radius:10px;">
+<div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:{c['muted']};">Initial sign-in credential</div>
+<div style="padding-top:8px;font-family:Consolas,'Courier New',monospace;font-size:18px;line-height:26px;font-weight:700;overflow-wrap:anywhere;color:{c['ink']};">{temp_password}</div>
+</td></tr></table>
+<p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">You must change the temporary password at your first sign-in if prompted. Never share your credentials or reuse this password on another service.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">If you were not expecting this account, contact your administrator through a trusted channel before signing in.</p>'''
+            text_body = f"Welcome, {self._value(context, 'name', 'there')}.\n\nYour staff profile has been created. Initial sign-in credential: {self._value(context, 'temp_password')}\n\nChange the temporary password at first sign-in if prompted. Do not share it or reuse it elsewhere. If you were not expecting this account, contact your administrator."
+            html_body = self._layout(preheader="Your staff account has been created.", eyebrow="Staff account", title="Welcome to the team", content=content, footer_note="This message contains an initial sign-in credential. Store it securely and do not forward this email.")
+
+        elif event_type in ("report_ready", "report_released"):
+            subject = "Your diagnostic report is ready | Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 14px;">Dear {patient_name},</p>
+<p style="margin:0 0 20px;color:{c['muted']};">Your diagnostic report has been prepared. The attached PDF contains the report document for your reference.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;"><tr><td style="padding:18px;background-color:{c['surface']};border:1px solid {c['border']};border-radius:10px;">
+<div style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:{c['muted']};">Report reference</div>
+<div style="padding-top:6px;font-size:18px;line-height:25px;font-weight:700;color:{c['ink']};">{patient_code}</div>
+<div style="padding-top:10px;font-size:13px;line-height:20px;color:{c['primary']};font-weight:700;">Report prepared</div>
+</td></tr></table>
+<p style="margin:0 0 10px;font-size:13px;line-height:21px;color:{c['muted']};">Please keep the attached report private and share it only with the appropriate healthcare professional. If you believe this report was sent to you in error, contact the laboratory through a trusted channel.</p>
+<p style="margin:0;font-size:13px;line-height:21px;color:{c['muted']};">You may contact the laboratory reception if you need assistance or a printed copy.</p>'''
+            text_body = f"Dear {self._value(context, 'patient_name', 'Patient')},\n\nYour diagnostic report has been prepared. Report reference: {self._value(context, 'patient_code', 'Not provided')}\n\nThe report PDF is attached if included with this email. Please keep it private and share it only with the appropriate healthcare professional. Contact the laboratory reception if you need assistance or a printed copy."
+            html_body = self._layout(preheader="Your diagnostic report has been prepared.", eyebrow="Diagnostic services", title="Your report is ready", content=content, footer_note="Confidential: this email and any attached report are intended only for the recipient. If received in error, contact the laboratory and delete the message.")
+
+        else:
+            # Never dump the full context into an email; it may contain sensitive data.
+            subject = "A notification from Akriti Diagnostics"
+            content = f'''<p style="margin:0 0 12px;">Hello {name},</p>
+<p style="margin:0;color:{c['muted']};">You have received a notification from Akriti Diagnostics Center. Please sign in through your usual trusted application entry point if further action is required.</p>'''
+            text_body = f"Hello {self._value(context, 'name', 'there')},\n\nYou have received a notification from Akriti Diagnostics Center. Sign in through your usual trusted application entry point if further action is required."
+            html_body = self._layout(preheader="A notification from Akriti Diagnostics Center.", eyebrow="Notification", title="You have a notification", content=content)
+
+        return subject, html_body, text_body
+
+
     def send(self, event_type: str, recipient_email: str, context: Dict[str, Any]) -> bool:
         try:
             if not recipient_email or "@" not in str(recipient_email):
@@ -48,99 +232,7 @@ class EmailProvider(NotificationProvider):
             # from email import encoders
             # --------------------------------------------------------
 
-            subject_map = {
-                "otp": f"Your OTP for Akriti Diagnostics — {context.get('otp', '')}",
-                "password_reset": "Reset your Akriti Lab password",
-                "report_ready": f"Your lab report is ready — {context.get('patient_name', '')}",
-                "welcome_staff": f"Welcome to Akriti Diagnostics Center — {context.get('name', '')}",
-                "password_change": f"Your OTP for password change — {context.get('otp', '')}",
-                "delete_verify": f"Your OTP for hard deleting patient data — {context.get('otp', '')}",
-            }
-            body_map = {
-                "otp": f"""
-                <div style="font-family:'Manrope', -apple-system, sans-serif; max-width: 480px; margin: 20px auto; border: 1px solid #E7E7E3; border-radius: 12px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(22,32,28,0.04);">
-                  <div style="background-color: #0E5C4E; padding: 24px; text-align: center;">
-                    <h2 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">Akriti Diagnostics Center</h2>
-                  </div>
-                  <div style="padding: 32px; color: #16201C; line-height: 1.6;">
-                    <p style="margin-top: 0; font-size: 15px; font-weight: 500;">Hello,</p>
-                    <p style="font-size: 14px; color: #7A8880;">Use the following One-Time Password (OTP) to securely log in to your account. This code is valid for 5 minutes.</p>
-                    <div style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0E5C4E; padding: 18px; background-color: #E4EEEB; border-radius: 8px; text-align: center; margin: 24px 0; border: 1px solid #C4DFD8;">{context.get('otp','')}</div>
-                    <p style="color: #A7B2AC; font-size: 12px; margin-bottom: 0; text-align: center;">If you did not request this login code, you can safely ignore this email.</p>
-                  </div>
-                </div>
-                """,
-                "password_reset": f"""
-                <div style="font-family:'Manrope', -apple-system, sans-serif; max-width: 480px; margin: 20px auto; border: 1px solid #E7E7E3; border-radius: 12px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(22,32,28,0.04);">
-                  <div style="background-color: #0E5C4E; padding: 24px; text-align: center;">
-                    <h2 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">Akriti Diagnostics Center</h2>
-                  </div>
-                  <div style="padding: 32px; color: #16201C; line-height: 1.6;">
-                    <p style="margin-top: 0; font-size: 15px; font-weight: 500;">Password Reset Request,</p>
-                    <p style="font-size: 14px; color: #7A8880;">Use the following One-Time Password (OTP) to complete your password reset. This code is valid for 5 minutes.</p>
-                    <div style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0E5C4E; padding: 18px; background-color: #E4EEEB; border-radius: 8px; text-align: center; margin: 24px 0; border: 1px solid #C4DFD8;">{context.get('otp','')}</div>
-                    <p style="color: #A7B2AC; font-size: 12px; margin-bottom: 0; text-align: center;">If you did not request a password reset, please contact system support immediately.</p>
-                  </div>
-                </div>
-                """,
-                "report_ready": f"""
-                <div style="font-family:'Manrope', -apple-system, sans-serif; max-width: 480px; margin: 20px auto; border: 1px solid #E7E7E3; border-radius: 12px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(22,32,28,0.04);">
-                  <div style="background-color: #0E5C4E; padding: 24px; text-align: center;">
-                    <h2 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">Akriti Diagnostics Center</h2>
-                  </div>
-                  <div style="padding: 32px; color: #16201C; line-height: 1.6;">
-                    <p style="margin-top: 0; font-size: 15px; font-weight: 600;">Dear {context.get('patient_name','Patient')},</p>
-                    <p style="font-size: 14px; color: #7A8880;">Your diagnostic lab reports are ready and have been generated successfully.</p>
-                    <div style="background-color: #FAFAF8; padding: 18px; border-radius: 8px; margin: 24px 0; border: 1px solid #E7E7E3;">
-                      <div style="font-size: 13px; margin-bottom: 6px;"><strong style="color: #7A8880;">Patient ID:</strong> <span style="font-family: monospace; font-weight: 600;">{context.get('patient_code','')}</span></div>
-                      <div style="font-size: 13px;"><strong style="color: #7A8880;">Status:</strong> <span style="color: #2F8F5B; font-weight: 600;">REPORT READY</span></div>
-                    </div>
-                    <p style="font-size: 13px; color: #7A8880; margin-bottom: 0;">Your report is attached to this email as a PDF. You may also collect a hard copy from our lab reception.</p>
-                  </div>
-                </div>
-                """,
-                "welcome_staff": f"""
-                <div style="font-family:'Manrope', -apple-system, sans-serif; max-width: 480px; margin: 20px auto; border: 1px solid #E7E7E3; border-radius: 12px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(22,32,28,0.04);">
-                  <div style="background-color: #0E5C4E; padding: 24px; text-align: center;">
-                    <h2 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">Welcome to Akriti Diagnostics</h2>
-                  </div>
-                  <div style="padding: 32px; color: #16201C; line-height: 1.6;">
-                    <p style="margin-top: 0; font-size: 15px; font-weight: 600;">Dear {context.get('name','')},</p>
-                    <p style="font-size: 14px; color: #7A8880;">Your staff profile has been registered successfully. Use the temporary password below to log in and configure your account:</p>
-                    <div style="font-size: 24px; font-weight: 800; color: #0E5C4E; padding: 18px; background-color: #E4EEEB; border-radius: 8px; text-align: center; margin: 24px 0; border: 1px solid #C4DFD8; font-variant-numeric: tabular-nums;">{context.get('temp_password','')}</div>
-                    <p style="font-size: 13px; color: #7A8880;">You will be prompted to choose a new secure password on your first login.</p>
-                    <hr style="border: 0; border-top: 1px solid #E7E7E3; margin: 24px 0;">
-                    <p style="color: #A7B2AC; font-size: 12px; margin-bottom: 0; text-align: center;">Akriti Diagnostics Center · Administration portal</p>
-                  </div>
-                </div>
-                """,
-                "password_change": f"""
-                <div style="font-family:'Manrope', -apple-system, sans-serif; max-width: 480px; margin: 20px auto; border: 1px solid #E7E7E3; border-radius: 12px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(22,32,28,0.04);">
-                  <div style="background-color: #0E5C4E; padding: 24px; text-align: center;">
-                    <h2 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">Akriti Diagnostics Center</h2>
-                  </div>
-                  <div style="padding: 32px; color: #16201C; line-height: 1.6;">
-                    <p style="margin-top: 0; font-size: 15px; font-weight: 500;">Hello,</p>
-                    <p style="font-size: 14px; color: #7A8880;">Use the following One-Time Password (OTP) to securely change your password. This code is valid for 5 minutes.</p>
-                    <div style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0E5C4E; padding: 18px; background-color: #E4EEEB; border-radius: 8px; text-align: center; margin: 24px 0; border: 1px solid #C4DFD8;">{context.get('otp','')}</div>
-                    <p style="color: #A7B2AC; font-size: 12px; margin-bottom: 0; text-align: center;">If you did not request this, please secure your account immediately.</p>
-                  </div>
-                </div>
-                """,
-                "delete_verify": f"""
-                <div style="font-family:'Manrope', -apple-system, sans-serif; max-width: 480px; margin: 20px auto; border: 1px solid #E7E7E3; border-radius: 12px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(22,32,28,0.04);">
-                  <div style="background-color: #9A0002; padding: 24px; text-align: center;">
-                    <h2 style="color: #FFFFFF; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">Akriti Diagnostics Center</h2>
-                  </div>
-                  <div style="padding: 32px; color: #16201C; line-height: 1.6;">
-                    <p style="margin-top: 0; font-size: 15px; font-weight: 600; color: #9A0002;">CRITICAL ACTION — Hard Delete Patient Data</p>
-                    <p style="font-size: 14px; color: #7A8880;">You have requested to hard delete patient data from the system. Use the following One-Time Password (OTP) to verify and authorize this wipe. This code is valid for 5 minutes.</p>
-                    <div style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #9A0002; padding: 18px; background-color: #FDF3F3; border-radius: 8px; text-align: center; margin: 24px 0; border: 1px solid #F3D3D3;">{context.get('otp','')}</div>
-                    <p style="color: #A7B2AC; font-size: 12px; margin-bottom: 0; text-align: center;">If you did not request this delete action, contact admin support immediately.</p>
-                  </div>
-                </div>
-                """,
-            }
+            subject, html_body, text_body = self._render_template(event_type, context or {})
 
             attachment_bytes = context.get("attachment_bytes")
             attachment_name  = context.get("attachment_name")
@@ -182,9 +274,6 @@ class EmailProvider(NotificationProvider):
 
             # --- ACTIVE BREVO TRANSACTIONAL EMAIL REST CLIENT IMPLEMENTATION ---
 
-            subject = subject_map.get(event_type, "Notification from Akriti Diagnostics")
-            html_body = body_map.get(event_type, f"<p>{context}</p>")
-
             payload = {
                 "sender": {
                     "name": settings.MAIL_FROM_NAME,
@@ -196,7 +285,8 @@ class EmailProvider(NotificationProvider):
                     }
                 ],
                 "subject": subject,
-                "htmlContent": html_body
+                "htmlContent": html_body,
+                "textContent": text_body
             }
 
             if attachment_bytes and attachment_name:

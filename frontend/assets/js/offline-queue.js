@@ -89,15 +89,19 @@ const OfflineQueue = (() => {
     });
   }
 
-  async function getAll(filterUser = false) {
+  async function getAll(filterUser = true) {
     const d = await openDB();
     const userId = getCurrentUserId();
     return new Promise((resolve, reject) => {
       const req = d.transaction(STORE, 'readonly').objectStore(STORE).getAll();
       req.onsuccess = e => {
         let items = e.target.result || [];
-        if (filterUser && userId) {
-          items = items.filter(it => !it.ownerId || String(it.ownerId) === String(userId));
+        if (filterUser) {
+          if (userId) {
+            items = items.filter(it => it.ownerId && String(it.ownerId) === String(userId));
+          } else {
+            items = items.filter(it => !it.ownerId);
+          }
         }
         resolve(items);
       };
@@ -196,7 +200,7 @@ const OfflineQueue = (() => {
     const online = await isOnline();
     if (!online) return;
 
-    const items = await getAll(false);
+    const items = await getAll(true);
     if (!items.length) {
       if (onlineBanner && onlineBanner.classList.contains('show')) {
         updateBanner('success');
@@ -388,7 +392,7 @@ const OfflineQueue = (() => {
   }
 
   async function retryItem(itemId) {
-    const items = await getAll(false);
+    const items = await getAll(true);
     const item = items.find(i => i.id === itemId);
     if (!item) {
       return { success: false, reason: 'Record not found in local offline storage.' };
@@ -397,7 +401,7 @@ const OfflineQueue = (() => {
   }
 
   async function retryAll() {
-    const items = await getAll(false);
+    const items = await getAll(true);
     const failedItems = items.filter(i => i.status === 'FAILED' || i.status === 'PENDING' || i.status === 'CONFLICT');
     let succeeded = 0;
     let failed = 0;
@@ -414,7 +418,7 @@ const OfflineQueue = (() => {
   }
 
   async function resolveConflict(itemId, resolution) {
-    const items = await getAll(false);
+    const items = await getAll(true);
     const item = items.find(i => i.id === itemId);
     if (!item) {
       flush();

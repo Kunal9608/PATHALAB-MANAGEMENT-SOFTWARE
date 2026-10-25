@@ -447,7 +447,7 @@
   document.getElementById('amount-paid')?.addEventListener('blur', capAmountPaid);
   document.getElementById('discount-amount')?.addEventListener('input', capAmountPaid);
 
-  // Prefill if editing
+  // Prefill if editing existing patient
   if (editId) {
     try {
       const p = await API.get(`/api/v1/patients/${editId}`);
@@ -470,6 +470,69 @@
       }
       updateNetPayable();
     } catch { Toast.show('Failed to load patient data', 'error'); }
+  }
+
+  // Recovery Mode for Failed Cached Registrations
+  const urlParams = new URLSearchParams(location.search);
+  const recoverId = urlParams.get('recover_id');
+  const recoverRef = urlParams.get('recover_ref');
+
+  let recoverDraft = null;
+  const draftRaw = localStorage.getItem('akriti_patient_draft');
+  if (draftRaw) {
+    try { recoverDraft = JSON.parse(draftRaw); } catch (_) {}
+  }
+
+  const activeRecoverId = recoverId || (recoverDraft && recoverDraft.recover_id);
+  if (activeRecoverId) {
+    const d = recoverDraft || {};
+    const ref = recoverRef || d.temp_ref_id || 'Failed Registration';
+
+    // Show prominent recovery banner
+    const banner = document.createElement('div');
+    banner.className = 'card';
+    banner.style.cssText = 'background: rgba(217, 119, 6, 0.08); border: 1.5px solid #d97706; padding: 14px 18px; margin-bottom: 20px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+    banner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:24px;">🛠️</span>
+        <div>
+          <strong style="color:#b45309;font-size:14px;">Recovery Mode — ${escapeHtml(ref)}</strong>
+          <p style="margin:2px 0 0;font-size:12px;color:var(--color-ink-muted);">${escapeHtml(d.failure_reason ? 'Known issue: ' + d.failure_reason : 'Correct any validation errors and save to retry synchronization.')}</p>
+        </div>
+      </div>
+      <span class="badge badge-warning" style="font-size:11px;">Edit & Fix</span>
+    `;
+    const formCard = document.querySelector('.form-card');
+    if (formCard && formCard.parentNode) {
+      formCard.parentNode.insertBefore(banner, formCard);
+    }
+
+    if (d.name) document.getElementById('patient-name').value = d.name;
+    if (d.mobile) document.getElementById('patient-mobile').value = d.mobile;
+    if (d.age) document.getElementById('patient-age').value = d.age;
+    if (d.gender) PatientForm.setGender(d.gender);
+    if (d.doctor_id) PatientForm.setDoctor(d.doctor_id);
+    if (d.sample_date) document.getElementById('patient-sample-date').value = String(d.sample_date).substring(0, 10);
+    if (d.amount_paid != null) document.getElementById('amount-paid').value = d.amount_paid;
+    if (d.discount_amount != null) document.getElementById('discount-amount').value = d.discount_amount;
+    if (d.payment_mode) document.getElementById('payment-mode').value = d.payment_mode;
+
+    if (d.test_ids && Array.isArray(d.test_ids)) {
+      PatientForm.loadTests().then(allT => {
+        const testsToSet = [];
+        d.test_ids.forEach(tid => {
+          const found = (allT || []).find(t => String(t.id) === String(tid));
+          if (found) testsToSet.push(found);
+        });
+        if (testsToSet.length) {
+          PatientForm.setSelectedTests(testsToSet);
+          PatientForm.updateTotal();
+          PatientForm.renderSelectedChips();
+          PatientForm.renderTestPicker('test-picker-container', 'test-search-input');
+        }
+      });
+    }
+    updateNetPayable();
   }
 
   // ── Multi-Step Wizard Control ──────────────────────────────────────────────
@@ -624,6 +687,35 @@
         document.getElementById('patient-main-form').reset();
         showStep(1);
         return;
+      }
+
+      if (activeRecoverId) {
+        if (recoverDraft && recoverDraft.is_local) {
+          const localAll = await OfflineQueue.getAll(true);
+          const item = localAll.find(i => String(i.id) === String(activeRecoverId).replace('local-', ''));
+          if (item) {
+            item.payload = { ...item.payload, ...payload };
+            item.status = 'PENDING';
+            item.failureReason = null;
+            await OfflineQueue.resolveConflict(item.id, 'force');
+          }
+          localStorage.removeItem('akriti_patient_draft');
+          Toast.show('Offline registration corrected. Synchronizing...', 'success');
+          setTimeout(() => window.location.href = '/admin/failed-patients', 1200);
+          return;
+        } else {
+          await API.put(`/api/v1/offline-patients/${activeRecoverId}`, { patient_data: payload });
+          const retryRes = await API.post(`/api/v1/offline-patients/${activeRecoverId}/retry`, { patient_data: payload });
+          if (retryRes.status === 'SUCCESS') {
+            localStorage.removeItem('akriti_patient_draft');
+            Toast.show(`Patient recovered & synchronized: ${retryRes.patient_code}`, 'success', 6000);
+            setTimeout(() => window.location.href = '/admin/patients', 1500);
+            return;
+          } else {
+            Toast.show(`Fix saved, but sync returned: ${retryRes.failure_reason || 'Retry failed'}`, 'warning', 6000);
+            return;
+          }
+        }
       }
 
       try {

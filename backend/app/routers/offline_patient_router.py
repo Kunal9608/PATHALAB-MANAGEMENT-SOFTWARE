@@ -95,6 +95,24 @@ def retry_failed_cached_patient(
     return offline_patient_service.retry_failed_registration(db, record_id, current_user, payload=payload)
 
 
+@router.put("/{record_id}")
+def update_failed_cached_patient(
+    record_id: str,
+    payload: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Edit & Fix a failed cached registration.
+    Strictly verifies ownership: only the creator can edit the record.
+    Updates patient_data in durable storage so it can be safely retried.
+    """
+    patient_data = payload.get("patient_data") or payload
+    return offline_patient_service.update_failed_registration(
+        db, record_id, patient_data, current_user
+    )
+
+
 @router.delete("/{record_id}")
 def delete_failed_cached_patient(
     record_id: str,
@@ -110,8 +128,6 @@ def recover_stale_syncing(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Recover jobs stuck in SYNCING state. Scoped to current user unless admin."""
-    from backend.app.models.user import RoleEnum
-    owner_filter = None if current_user.role == RoleEnum.admin else current_user.id
-    count = offline_patient_service.recover_stale_syncing_jobs(db, max_age_seconds=60, owner_user_id=owner_filter)
+    """Recover jobs stuck in SYNCING state. Strictly scoped to the authenticated user's own records."""
+    count = offline_patient_service.recover_stale_syncing_jobs(db, max_age_seconds=60, owner_user_id=current_user.id)
     return {"recovered_count": count}

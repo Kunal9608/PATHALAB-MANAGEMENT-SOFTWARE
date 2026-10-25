@@ -280,9 +280,15 @@ def retry_failed_registration(
     if not record:
         raise HTTPException(status_code=404, detail="Failed cached record not found")
 
-    if payload and payload.get("force_duplicate"):
+    if payload:
         p_data = dict(record.patient_data or {})
-        p_data["force_duplicate"] = True
+        if payload.get("force_duplicate"):
+            p_data["force_duplicate"] = True
+        if "patient_data" in payload and isinstance(payload["patient_data"], dict):
+            p_data.update(payload["patient_data"])
+        for k in ("name", "mobile", "age", "gender", "doctor_id", "test_ids", "sample_date", "total_amount", "discount_amount", "amount_paid", "payment_mode"):
+            if k in payload:
+                p_data[k] = payload[k]
         record.patient_data = p_data
         db.commit()
 
@@ -309,6 +315,52 @@ def retry_failed_registration(
     return process_single_registration(db, record, current_user)
 
 
+def update_failed_registration(
+    db: Session,
+    record_id_or_ref: str,
+    patient_data: Dict[str, Any],
+    current_user: User,
+) -> Dict[str, Any]:
+    """Edit & Fix patient data for a failed cached registration owned by current_user."""
+    query = db.query(CachedPatientRegistration).filter(
+        CachedPatientRegistration.owner_id == current_user.id
+    )
+    try:
+        rec_uuid = uuid.UUID(record_id_or_ref)
+        record = query.filter(or_(CachedPatientRegistration.id == rec_uuid, CachedPatientRegistration.temp_ref_id == record_id_or_ref)).with_for_update().first()
+    except ValueError:
+        record = query.filter(CachedPatientRegistration.temp_ref_id == record_id_or_ref).with_for_update().first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Failed cached record not found")
+
+    if record.status == "SUCCESS":
+        raise HTTPException(status_code=400, detail="Cannot edit a patient that has already synchronized.")
+
+    p_data = dict(record.patient_data or {})
+    p_data.update(patient_data)
+    record.patient_data = p_data
+    record.failure_reason = None
+    record.error_details = None
+    record.status = "FAILED"
+    db.commit()
+    db.refresh(record)
+
+    audit_service.log(
+        db, "offline_patient.edit_and_fix",
+        actor_user_id=current_user.id,
+        entity_type="offline_registration",
+        entity_id=record.id,
+        after={"temp_ref_id": record.temp_ref_id},
+    )
+
+    return {
+        "status": "UPDATED",
+        "temp_ref_id": record.temp_ref_id,
+        "patient_data": record.patient_data,
+    }
+
+
 def delete_failed_registration(
     db: Session,
     record_id_or_ref: str,
@@ -327,9 +379,27 @@ def delete_failed_registration(
     if not record:
         raise HTTPException(status_code=404, detail="Failed cached record not found")
 
+    if record.status == "SYNCING":
+        stale_threshold = datetime.now(timezone.utc) - timedelta(seconds=60)
+        if not (record.last_attempt_at and record.last_attempt_at < stale_threshold):
+            raise HTTPException(status_code=409, detail="Record is actively synchronizing. Please wait a moment before deleting.")
+
+    if record.status == "SUCCESS" and record.permanent_patient_id:
+        raise HTTPException(status_code=400, detail="Cannot delete a patient registration that has already synchronized.")
+
+    temp_ref_id = record.temp_ref_id
+    rec_id = record.id
     db.delete(record)
     db.commit()
-    return {"status": "DELETED", "temp_ref_id": record.temp_ref_id}
+
+    audit_service.log(
+        db, "offline_patient.delete",
+        actor_user_id=current_user.id,
+        entity_type="offline_registration",
+        entity_id=rec_id,
+        after={"temp_ref_id": temp_ref_id},
+    )
+    return {"status": "DELETED", "temp_ref_id": temp_ref_id}
 
 
 def list_failed_registrations(
@@ -449,7 +519,7 @@ def recover_stale_syncing_jobs(db: Session, max_age_seconds: int = 60, owner_use
         CachedPatientRegistration.last_attempt_at < threshold
     )
     if owner_user_id:
-        query = query.filter(CachedPatientRegistration.created_by_user_id == owner_user_id)
+        query = query.filter(CachedPatientRegistration.owner_id == owner_user_id)
 
     stale_jobs = query.all()
 

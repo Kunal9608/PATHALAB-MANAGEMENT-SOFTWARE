@@ -290,50 +290,75 @@
   // ── OTP Login ─────────────────────────────────────────────────────────────
   let otpStep = 'request'; // 'request' | 'verify'
   let resendTimerInterval = null;
+  let resendDeadline = 0;
 
-  function startResendTimer(email) {
+  function updateResendTimerDisplay(email) {
     const container = document.getElementById('resend-otp-container');
     const timerText = document.getElementById('resend-otp-timer');
     const resendBtn = document.getElementById('resend-otp-btn');
-    
-    container.style.display = 'block';
-    resendBtn.style.display = 'none';
-    timerText.style.display = 'inline';
-    
-    let secondsLeft = 60;
-    timerText.textContent = `Resend OTP in ${secondsLeft}s`;
-    
-    if (resendTimerInterval) clearInterval(resendTimerInterval);
-    
-    resendTimerInterval = setInterval(() => {
-      secondsLeft--;
-      if (secondsLeft <= 0) {
+    if (!container || !timerText || !resendBtn) return;
+
+    const remaining = Math.max(0, Math.ceil((resendDeadline - Date.now()) / 1000));
+    if (remaining <= 0) {
+      if (resendTimerInterval) {
         clearInterval(resendTimerInterval);
-        timerText.style.display = 'none';
-        resendBtn.style.display = 'inline-block';
-      } else {
-        timerText.textContent = `Resend OTP in ${secondsLeft}s`;
+        resendTimerInterval = null;
       }
-    }, 1000);
+      resendDeadline = 0;
+      if (email) sessionStorage.removeItem(`akriti_otp_deadline_${email}`);
+      timerText.style.display = 'none';
+      resendBtn.disabled = false;
+      resendBtn.style.display = 'inline-block';
+      resendBtn.textContent = 'Resend OTP';
+    } else {
+      container.style.display = 'block';
+      resendBtn.disabled = true;
+      resendBtn.style.display = 'none';
+      timerText.style.display = 'inline';
+      timerText.textContent = `Resend OTP in ${remaining}s`;
+    }
   }
+
+  function startResendTimer(email, durationSeconds = 60) {
+    if (resendTimerInterval) clearInterval(resendTimerInterval);
+    resendDeadline = Date.now() + durationSeconds * 1000;
+    if (email) sessionStorage.setItem(`akriti_otp_deadline_${email}`, resendDeadline);
+
+    updateResendTimerDisplay(email);
+    resendTimerInterval = setInterval(() => updateResendTimerDisplay(email), 1000);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && resendDeadline > 0) {
+      const email = document.getElementById('otp-email')?.value.trim();
+      updateResendTimerDisplay(email);
+    }
+  });
 
   // Bind click listener to resend-otp-btn
   document.getElementById('resend-otp-btn').addEventListener('click', async () => {
     const email = document.getElementById('otp-email').value.trim();
     if (!email) return;
     const resendBtn = document.getElementById('resend-otp-btn');
+    if (resendBtn.disabled) return;
+
     resendBtn.disabled = true;
     resendBtn.textContent = 'Sending...';
     try {
       const recaptcha_token = await getRecaptchaToken('otp_resend');
       await API.post('/api/v1/auth/otp/request', { email, purpose: 'login', recaptcha_token }, { silent: true });
-      Toast.show('OTP resent successfully', 'success');
-      startResendTimer(email);
+      Toast.show('OTP request accepted. Please check your registered email.', 'success');
+      startResendTimer(email, 60);
     } catch (err) {
-      Toast.show(err.message || 'Failed to resend OTP', 'error');
-    } finally {
-      resendBtn.disabled = false;
-      resendBtn.textContent = 'Resend OTP';
+      const errMsg = err.message || 'Failed to resend OTP';
+      Toast.show(errMsg, 'error');
+      const match = errMsg.match(/wait (\d+) second/i);
+      if (match && match[1]) {
+        startResendTimer(email, parseInt(match[1], 10));
+      } else {
+        resendBtn.disabled = false;
+        resendBtn.textContent = 'Resend OTP';
+      }
     }
   });
 
@@ -345,6 +370,7 @@
     if (otpStep === 'request') {
       if (!email) { Toast.show('Enter your email', 'warning'); return; }
       btn.setAttribute('aria-busy','true');
+      btn.disabled = true;
       btn.innerHTML = `<span class="btn-loading-spinner"></span>`;
       try {
         const recaptcha_token = await getRecaptchaToken('otp_request');
@@ -354,11 +380,18 @@
         document.getElementById('ff-otp-code').style.display = '';
         document.getElementById('otp-email').disabled = true;
         btn.innerHTML = 'Verify OTP';
-        startResendTimer(email);
+        Toast.show('OTP request accepted. Please check your registered email.', 'success');
+        startResendTimer(email, 60);
       } catch (err) {
-        Toast.show(err.message || 'Failed to send OTP', 'error');
+        const errMsg = err.message || 'Failed to send OTP';
+        Toast.show(errMsg, 'error');
+        const match = errMsg.match(/wait (\d+) second/i);
+        if (match && match[1]) {
+          startResendTimer(email, parseInt(match[1], 10));
+        }
       } finally {
         btn.removeAttribute('aria-busy');
+        btn.disabled = false;
         if (otpStep === 'request') btn.innerHTML = 'Send OTP';
       }
     } else {

@@ -31,6 +31,7 @@ from backend.app.routers import (
     patient_router, test_router, report_router,
     finance_router, security_router, copilot_router,
     whatsapp_router, offline_patient_router,
+    vault_router,
 )
 from backend.app.core.db import init_db, get_db
 from sqlalchemy.orm import Session
@@ -251,6 +252,7 @@ app.include_router(security_router.router, prefix=API_PREFIX)
 app.include_router(copilot_router.router, prefix=API_PREFIX)
 app.include_router(whatsapp_router.router, prefix=API_PREFIX)
 app.include_router(offline_patient_router.router, prefix=API_PREFIX)
+app.include_router(vault_router.router, prefix=API_PREFIX)
 
 
 

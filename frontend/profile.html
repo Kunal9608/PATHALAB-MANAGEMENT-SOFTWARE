@@ -291,6 +291,9 @@
                     Send OTP
                   </button>
                 </div>
+                <div id="pw-otp-timer-container" style="display:none;margin-top:6px;font-size:12px;color:var(--color-ink-light);">
+                  <span id="pw-otp-timer-text">Resend OTP in 60s</span>
+                </div>
               </div>
               <div class="form-field mb-4">
                 <label class="form-label" for="new-pw">New Password <span class="required">*</span></label>
@@ -509,18 +512,66 @@
     });
   });
 
+  let pwOtpTimerInterval = null;
+  let pwOtpDeadline = 0;
+  const pwOtpTimerContainer = document.getElementById('pw-otp-timer-container');
+  const pwOtpTimerText = document.getElementById('pw-otp-timer-text');
+
+  function updatePwOtpTimerDisplay() {
+    const remaining = Math.max(0, Math.ceil((pwOtpDeadline - Date.now()) / 1000));
+    if (remaining <= 0) {
+      if (pwOtpTimerInterval) {
+        clearInterval(pwOtpTimerInterval);
+        pwOtpTimerInterval = null;
+      }
+      pwOtpDeadline = 0;
+      if (pwOtpTimerContainer) pwOtpTimerContainer.style.display = 'none';
+      requestPwOtpBtn.disabled = false;
+      requestPwOtpBtn.textContent = 'Resend OTP';
+    } else {
+      if (pwOtpTimerContainer) pwOtpTimerContainer.style.display = 'block';
+      if (pwOtpTimerText) pwOtpTimerText.textContent = `Resend OTP in ${remaining}s`;
+      requestPwOtpBtn.disabled = true;
+      requestPwOtpBtn.textContent = 'Resend OTP';
+    }
+  }
+
+  function startPwOtpTimer(durationSeconds = 60) {
+    if (pwOtpTimerInterval) clearInterval(pwOtpTimerInterval);
+    pwOtpDeadline = Date.now() + durationSeconds * 1000;
+    updatePwOtpTimerDisplay();
+    pwOtpTimerInterval = setInterval(updatePwOtpTimerDisplay, 1000);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && pwOtpDeadline > 0) {
+      updatePwOtpTimerDisplay();
+    }
+  });
+
   requestPwOtpBtn.addEventListener('click', async () => {
+    if (requestPwOtpBtn.disabled) return;
     requestPwOtpBtn.setAttribute('aria-busy', 'true');
+    requestPwOtpBtn.disabled = true;
     requestPwOtpBtn.textContent = 'Sending...';
     try {
       const recaptcha_token = await getRecaptchaToken('otp_request');
       await API.post('/api/v1/auth/otp/request', { email: me.email, purpose: 'password_change', recaptcha_token });
-      Toast.show('OTP code sent to your registered email', 'success');
+      Toast.show('OTP request accepted. Please check your registered email.', 'success');
+      startPwOtpTimer(60);
     } catch (err) {
-      Toast.show(err.message || 'Failed to send OTP', 'error');
+      const errMsg = err.message || 'Failed to send OTP';
+      Toast.show(errMsg, 'error');
+      // If server returned cooldown wait message, honor the server's remaining duration
+      const match = errMsg.match(/wait (\d+) second/i);
+      if (match && match[1]) {
+        startPwOtpTimer(parseInt(match[1], 10));
+      } else if (pwOtpDeadline <= Date.now()) {
+        requestPwOtpBtn.disabled = false;
+        requestPwOtpBtn.textContent = 'Send OTP';
+      }
     } finally {
       requestPwOtpBtn.removeAttribute('aria-busy');
-      requestPwOtpBtn.textContent = 'Send OTP';
     }
   });
 

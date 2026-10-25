@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Important Documents — Akriti Diagnostics Center</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/skeleton.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script src="/assets/js/theme.js"></script>
+
+  <style>
+    /* ── Locked State Card ────────────────────────────────────── */
+    .locked-state-card {
+      max-width: 460px;
+      margin: 48px auto;
+      padding: 40px 36px;
+      background: var(--surface, #111C2E);
+      border: 1px solid var(--border, #26364B);
+      border-radius: var(--radius-xl, 18px);
+      box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+      text-align: center;
+      position: relative;
+      transition: all var(--transition-base);
+    }
+    [data-theme="light"] .locked-state-card {
+      background: #FFFFFF;
+      border-color: #E2E8F0;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+    }
+    .locked-badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: rgba(96, 165, 250, 0.12);
+      border: 1px solid rgba(96, 165, 250, 0.28);
+      color: var(--accent, #60A5FA);
+      margin-bottom: 22px;
+    }
+    [data-theme="light"] .locked-badge-pill {
+      background: rgba(10, 25, 47, 0.06);
+      border-color: rgba(10, 25, 47, 0.14);
+      color: #0A192F;
+    }
+    .locked-icon-wrapper {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(96, 165, 250, 0.2) 0%, rgba(96, 165, 250, 0.04) 70%);
+      border: 1.5px solid rgba(96, 165, 250, 0.35);
+      color: var(--accent, #60A5FA);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      box-shadow: 0 0 28px rgba(96, 165, 250, 0.16);
+    }
+    [data-theme="light"] .locked-icon-wrapper {
+      background: radial-gradient(circle, rgba(10, 25, 47, 0.1) 0%, rgba(10, 25, 47, 0.02) 70%);
+      border-color: rgba(10, 25, 47, 0.2);
+      color: #0A192F;
+      box-shadow: 0 0 20px rgba(10, 25, 47, 0.06);
+    }
+    .locked-title {
+      font-family: var(--font-display, sans-serif);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--ink, #F1F5F9);
+      margin: 0 0 8px 0;
+      letter-spacing: -0.01em;
+    }
+    .locked-desc {
+      font-size: 13.5px;
+      color: var(--ink-muted, #B0BED0);
+      line-height: 1.6;
+      margin: 0 0 28px 0;
+    }
+    .input-wrap-relative {
+      position: relative;
+      width: 100%;
+    }
+    .vault-password-input {
+      background: var(--surface-input, #0D1728) !important;
+      color: var(--ink, #F1F5F9) !important;
+      border: 1.5px solid var(--border, #26364B) !important;
+      border-radius: var(--radius-md, 8px) !important;
+      height: 46px !important;
+      font-size: 15px !important;
+      padding: 0 44px 0 16px !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+      outline: none !important;
+    }
+    .vault-password-input::placeholder {
+      color: var(--ink-faint, #8798AE) !important;
+    }
+    .vault-password-input:focus {
+      border-color: var(--accent, #60A5FA) !important;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25) !important;
+    }
+    [data-theme="light"] .vault-password-input {
+      background: #F8FAFC !important;
+      color: #0F172A !important;
+      border-color: #CBD5E1 !important;
+    }
+    [data-theme="light"] .vault-password-input:focus {
+      border-color: #0A192F !important;
+      box-shadow: 0 0 0 3px rgba(10, 25, 47, 0.12) !important;
+    }
+    .pw-toggle-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      padding: 6px;
+      cursor: pointer;
+      color: var(--ink-faint, #8798AE);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: color var(--transition-fast), background var(--transition-fast);
+    }
+    .pw-toggle-btn:hover {
+      color: var(--ink, #F1F5F9);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .btn-unlock {
+      background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
+      color: #ffffff !important;
+      height: 46px !important;
+      font-size: 14.5px !important;
+      font-weight: 600 !important;
+      border-radius: var(--radius-md, 8px) !important;
+      border: none !important;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 8px !important;
+      width: 100% !important;
+      transition: all var(--transition-fast) !important;
+    }
+    .btn-unlock:hover {
+      background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%) !important;
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45) !important;
+      transform: translateY(-1px) !important;
+    }
+    .btn-unlock:active {
+      transform: scale(0.99) translateY(0) !important;
+    }
+    .btn-unlock:disabled {
+      opacity: 0.65 !important;
+      cursor: not-allowed !important;
+      transform: none !important;
+    }
+
+    /* ── Banner ──────────────────────────────────────────────── */
+    .vault-banner {
+      background: rgba(13, 148, 136, 0.08);
+      border: 1px solid rgba(13, 148, 136, 0.25);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .vault-banner svg {
+      flex-shrink: 0;
+      color: var(--color-primary);
+      margin-top: 2px;
+    }
+    .vault-banner-content h4 {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--color-ink);
+      margin-bottom: 4px;
+    }
+    .vault-banner-content p {
+      font-size: var(--text-xs);
+      color: var(--color-ink-light);
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    /* ── Filter Chips ────────────────────────────────────────── */
+    .vault-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+    .vault-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .filter-chip {
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      font-size: var(--text-xs);
+      font-weight: 500;
+      color: var(--color-ink-light);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .filter-chip:hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+    }
+    .filter-chip.active {
+      background: var(--color-primary);
+      color: #fff;
+      border-color: var(--color-primary);
+    }
+
+    /* ── Grid & Cards ────────────────────────────────────────── */
+    .vault-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+    .vault-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+    }
+    .vault-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+      border-color: rgba(13, 148, 136, 0.4);
+    }
+    .vault-card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .vault-card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      background: rgba(13, 148, 136, 0.12);
+      color: var(--color-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .vault-card-title {
+      font-size: var(--text-base);
+      font-weight: 600;
+      color: var(--color-ink);
+      word-break: break-word;
+      line-height: 1.4;
+      margin: 0 0 6px 0;
+    }
+    .vault-card-meta {
+      font-size: 11px;
+      color: var(--color-ink-lighter);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .vault-card-body {
+      font-size: var(--text-xs);
+      color: var(--color-ink-light);
+      margin-bottom: 16px;
+      line-height: 1.5;
+      background: rgba(0, 0, 0, 0.18);
+      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+      max-height: 110px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    [data-theme="light"] .vault-card-body {
+      background: var(--color-bg);
+    }
+    .vault-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 14px;
+      border-top: 1px solid var(--color-border);
+      margin-top: auto;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation"></nav>
+
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger" id="hamburger-btn" aria-label="Open menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <h1 class="page-heading" id="topbar-title">Important Documents</h1>
+      </div>
+    </header>
+
+    <div class="offline-banner" role="status"></div>
+
+    <main class="page-content">
+      <!-- ── 1. Locked State Card ──────────────────────────────── -->
+      <div id="vault-locked-view" class="locked-state-card">
+        <div>
+          <span class="locked-badge-pill">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            End-to-End Encrypted Storage
+          </span>
+        </div>
+        <div class="locked-icon-wrapper">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h2 class="locked-title">Admin Private Vault</h2>
+        <p class="locked-desc">
+          Enter your <strong>Administrator Account Password</strong> to verify your identity and decrypt your private laboratory documents and personal notes locally.
+        </p>
+
+        <div id="vault-unlock-container" style="max-width:340px;margin:0 auto;text-align:left;">
+          <div class="form-field mb-4">
+            <label class="form-label" for="vault-passphrase" style="font-size:13px;font-weight:600;color:var(--ink-muted);margin-bottom:6px;display:block;">
+              Admin Account Password <span style="color:var(--color-eosin,#F43F5E);">*</span>
+            </label>
+            <div class="input-wrap-relative">
+              <input type="password" class="vault-password-input" id="vault-passphrase" placeholder="Enter your login password" autocomplete="current-password" autofocus>
+              <button type="button" class="pw-toggle-btn" id="toggle-pw-visibility" aria-label="Toggle password visibility">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div style="font-size:11.5px;color:var(--ink-faint);margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
+              <span>Verified against your account</span>
+              <span style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,255,255,0.06);padding:2px 7px;border-radius:4px;border:1px solid var(--border);">
+                Press <strong style="color:var(--ink);">↵ Enter</strong>
+              </span>
+            </div>
+          </div>
+
+          <button type="button" class="btn-unlock" id="unlock-submit-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Unlock Private Vault
+          </button>
+        </div>
+      </div>
+
+      <!-- ── 2. Unlocked State View ────────────────────────────── -->
+      <div id="vault-unlocked-view" style="display:none;">
+        <!-- Vault Unlocked Header Toolbar -->
+        <div class="vault-unlocked-toolbar" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;padding:16px 20px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);">
+          <div>
+            <h2 style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--color-ink);margin:0 0 4px 0;">Encrypted Vault Items</h2>
+            <p style="font-size:12px;color:var(--color-ink-muted);margin:0;">Decrypted locally with AES-256-GCM • Private to your administrator account</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" id="lock-vault-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Lock Vault
+            </button>
+            <button class="btn btn-secondary btn-sm" id="add-note-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              Add Secure Note
+            </button>
+            <button class="btn btn-primary btn-sm" id="upload-doc-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Upload Document
+            </button>
+          </div>
+        </div>
+
+        <div class="vault-banner">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <div class="vault-banner-content">
+            <h4>End-to-End Encrypted Storage (AES-256-GCM)</h4>
+            <p>
+              Stored in Joy S3 with creator-level isolation. Ciphertext is decrypted only in your browser. Server administrators cannot view plaintext files or passphrases. Deletion permanently erases the ciphertext object from storage.
+            </p>
+          </div>
+        </div>
+
+        <!-- Controls: Search & Category Chips -->
+        <div class="vault-controls">
+          <div class="vault-filters" id="category-chips">
+            <button class="filter-chip active" data-category="all">All</button>
+            <button class="filter-chip" data-category="Identification">Identification</button>
+            <button class="filter-chip" data-category="Financial & Tax">Financial & Tax</button>
+            <button class="filter-chip" data-category="Legal & Lab">Legal & Lab</button>
+            <button class="filter-chip" data-category="Certificates">Certificates</button>
+            <button class="filter-chip" data-category="Private Notes">Private Notes</button>
+          </div>
+          <div style="position:relative;width:250px;">
+            <input type="search" class="form-input" id="vault-search" placeholder="Search decrypted items..." style="padding-left:34px;height:36px;font-size:13px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--color-ink-lighter);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+        </div>
+
+        <!-- Skeletons container -->
+        <div id="vault-skeletons" class="vault-grid" style="display:none;">
+          <div class="vault-card"><div class="skeleton" style="height:150px;border-radius:var(--radius-md);"></div></div>
+          <div class="vault-card"><div class="skeleton" style="height:150px;border-radius:var(--radius-md);"></div></div>
+          <div class="vault-card"><div class="skeleton" style="height:150px;border-radius:var(--radius-md);"></div></div>
+        </div>
+
+        <!-- Items Grid -->
+        <div id="vault-items-grid" class="vault-grid"></div>
+
+        <!-- Empty State -->
+        <div id="vault-empty-state" style="display:none;text-align:center;padding:50px 24px;background:var(--color-surface);border:1px dashed var(--color-border);border-radius:var(--radius-lg);margin-top:20px;">
+          <div style="font-size:38px;margin-bottom:12px;">📁</div>
+          <h3 style="font-size:var(--text-base);font-weight:600;color:var(--color-ink);margin-bottom:6px;">No Vault Items Found</h3>
+          <p style="font-size:var(--text-xs);color:var(--color-ink-light);margin-bottom:18px;">
+            Upload your first private document or save an encrypted administrative note.
+          </p>
+          <div style="display:flex;gap:10px;justify-content:center;">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('add-note-btn').click()">Add Note</button>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('upload-doc-btn').click()">Upload Document</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Upload Document Modal -->
+<div class="modal-backdrop" id="upload-doc-modal" style="display:none;">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Upload Encrypted Document</h3>
+      <button class="modal-close" onclick="closeModal('upload-doc-modal')">&times;</button>
+    </div>
+    <form id="upload-doc-form" onsubmit="return false;">
+      <div class="modal-body">
+        <div class="form-field mb-3">
+          <label class="form-label" for="doc-title">Document Title <span class="required">*</span></label>
+          <input type="text" class="form-input" id="doc-title" placeholder="e.g. Lab Registration Certificate" required maxlength="100">
+        </div>
+        <div class="form-field mb-3">
+          <label class="form-label" for="doc-category">Category</label>
+          <select class="form-input" id="doc-category">
+            <option value="Identification">Identification</option>
+            <option value="Financial & Tax">Financial & Tax</option>
+            <option value="Legal & Lab">Legal & Lab</option>
+            <option value="Certificates">Certificates</option>
+            <option value="General" selected>General</option>
+          </select>
+        </div>
+        <div class="form-field mb-3">
+          <label class="form-label" for="doc-file">Select File <span class="required">*</span></label>
+          <input type="file" class="form-input" id="doc-file" accept=".pdf,.png,.jpg,.jpeg,.txt" required style="padding-top:6px;">
+          <span class="form-hint" style="font-size:11px;color:var(--color-ink-lighter);margin-top:4px;display:block;">
+            Supported formats: PDF, PNG, JPG, TXT (Max 15MB). Encrypted with AES-256-GCM before upload.
+          </span>
+        </div>
+        <div id="upload-progress-box" style="display:none;margin-top:12px;">
+          <div style="font-size:11px;color:var(--color-primary);margin-bottom:4px;font-weight:600;" id="upload-progress-text">
+            Encrypting with AES-256-GCM...
+          </div>
+          <div class="skeleton" style="height:6px;border-radius:3px;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('upload-doc-modal')">Cancel</button>
+        <button type="button" class="btn btn-primary" id="upload-submit-btn">Encrypt & Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit Note Modal -->
+<div class="modal-backdrop" id="note-modal" style="display:none;">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="note-modal-title">Add Encrypted Note</h3>
+      <button class="modal-close" onclick="closeModal('note-modal')">&times;</button>
+    </div>
+    <form id="note-form" onsubmit="return false;">
+      <input type="hidden" id="edit-note-id" value="">
+      <div class="modal-body">
+        <div class="form-field mb-3">
+          <label class="form-label" for="note-title">Title <span class="required">*</span></label>
+          <input type="text" class="form-input" id="note-title" placeholder="e.g. Bank Account & Settlement Details" required maxlength="100">
+        </div>
+        <div class="form-field mb-3">
+          <label class="form-label" for="note-category">Category</label>
+          <select class="form-input" id="note-category">
+            <option value="Private Notes" selected>Private Notes</option>
+            <option value="Financial & Tax">Financial & Tax</option>
+            <option value="Legal & Lab">Legal & Lab</option>
+            <option value="General">General</option>
+          </select>
+        </div>
+        <div class="form-field mb-3">
+          <label class="form-label" for="note-content">Encrypted Content <span class="required">*</span></label>
+          <textarea class="form-input" id="note-content" rows="6" placeholder="Confidential details, keys, emergency contacts..." required style="height:auto;padding:10px 12px;font-family:inherit;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('note-modal')">Cancel</button>
+        <button type="button" class="btn btn-primary" id="save-note-btn">Encrypt & Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Note Preview Modal -->
+<div class="modal-backdrop" id="preview-note-modal" style="display:none;">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="preview-note-title">Decrypted Note</h3>
+      <button class="modal-close" onclick="closeModal('preview-note-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span class="badge badge-primary" id="preview-note-category">Note</span>
+        <button class="btn btn-secondary btn-sm" id="copy-note-btn">Copy Text</button>
+      </div>
+      <div id="preview-note-body" style="background:rgba(0,0,0,0.18);border:1px solid var(--color-border);padding:14px;border-radius:var(--radius-md);font-size:var(--text-xs);line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('preview-note-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="/assets/js/toast.js"></script>
+<script src="/assets/js/modal.js"></script>
+<script src="/assets/js/cache-manager.js"></script>
+<script src="/assets/js/api-client.js"></script>
+<script src="/assets/js/shell.js"></script>
+<script src="/assets/js/vault-crypto.js"></script>
+
+<script>
+  let vaultItems = [];
+  let decryptedItems = [];
+  let currentCategory = 'all';
+  let currentUser = null;
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  if (typeof window.API !== 'undefined' && !window.API.postForm) {
+    window.API.postForm = function(path, formData, opts) {
+      if (typeof window.API.raw === 'function') {
+        return window.API.raw('POST', path, formData, opts);
+      }
+      return fetch(path, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+        headers: opts && opts.headers ? opts.headers : {}
+      }).then(async res => {
+        if (!res.ok) {
+          let errData;
+          try { errData = await res.json(); } catch(_) {}
+          const err = new Error(errData?.detail || errData?.message || `HTTP ${res.status}`);
+          err.status = res.status;
+          err.data = errData;
+          throw err;
+        }
+        return res.json();
+      });
+    };
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).style.display = 'none';
+  }
+
+  function openModal(id) {
+    document.getElementById(id).style.display = 'flex';
+  }
+
+  // Bind password toggle immediately
+  const pwInput = document.getElementById('vault-passphrase');
+  const toggleBtn = document.getElementById('toggle-pw-visibility');
+  if (toggleBtn && pwInput) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isPw = pwInput.type === 'password';
+      pwInput.type = isPw ? 'text' : 'password';
+      toggleBtn.innerHTML = isPw
+        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    });
+  }
+
+  // Core Unlock Function — uses verified Admin Account Password
+  async function doUnlock() {
+    const password = pwInput ? pwInput.value : '';
+    const submitBtn = document.getElementById('unlock-submit-btn');
+
+    if (!password || !password.trim()) {
+      if (typeof window.Toast !== 'undefined') {
+        Toast.show('Please enter your administrator account password', 'warning');
+      }
+      if (pwInput) pwInput.focus();
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="btn-loading-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;margin-right:6px;"></span> Verifying Password...`;
+    }
+
+    try {
+      // 1. Verify against backend with Admin Account Password
+      await API.post('/api/v1/admin/vault/verify-unlock', { password: password }, { silent: true });
+
+      // 2. Resolve currentUser if not yet loaded
+      if (!currentUser || !currentUser.id) {
+        currentUser = await API.get('/api/v1/auth/me', { silent: true, cache: false });
+      }
+
+      // 3. Derive local AES-256-GCM key from password and admin ID
+      await VaultCrypto.unlockVault(password, currentUser.id);
+
+      if (typeof window.Toast !== 'undefined') {
+        Toast.show('Vault unlocked successfully', 'success');
+      }
+      showUnlockedView();
+    } catch (err) {
+      console.error('Vault unlock verification failed:', err);
+      let errMsg = 'Incorrect account password. Please try again.';
+      if (err.data && err.data.detail) {
+        errMsg = err.data.detail;
+      } else if (err.message && !err.message.includes('status') && !err.message.includes('code')) {
+        errMsg = err.message;
+      }
+      if (typeof window.Toast !== 'undefined') {
+        Toast.show(errMsg, 'error');
+      }
+      if (pwInput) {
+        pwInput.focus();
+        pwInput.select();
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Unlock Private Vault
+        `;
+      }
+    }
+  }
+
+  // Handle Enter key immediately without waiting for Shell.init
+  if (pwInput) {
+    pwInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        doUnlock();
+      }
+    });
+  }
+
+  const unlockBtn = document.getElementById('unlock-submit-btn');
+  if (unlockBtn) {
+    unlockBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      doUnlock();
+    });
+  }
+
+  // Intercept any potential form submit so page never reloads or redirects
+  document.addEventListener('submit', (e) => {
+    if (e.target && pwInput && e.target.contains(pwInput)) {
+      e.preventDefault();
+      e.stopPropagation();
+      doUnlock();
+      return false;
+    }
+  }, true);
+
+  (async function() {
+    // Initialize Shell with Admin role gate
+    try {
+      currentUser = await Shell.init({ role: 'admin', pageTitle: 'Important Documents' });
+    } catch (initErr) {
+      console.warn('Shell.init warning in vault:', initErr);
+    }
+
+    // 5. Lock Button
+    document.getElementById('lock-vault-btn').addEventListener('click', () => {
+      VaultCrypto.lockVault();
+      showLockedView();
+      Toast.show('Vault has been locked.', 'info');
+    });
+
+    // 6. Modal Openers
+    document.getElementById('upload-doc-btn').addEventListener('click', () => {
+      document.getElementById('upload-doc-form').reset();
+      document.getElementById('upload-progress-box').style.display = 'none';
+      openModal('upload-doc-modal');
+    });
+
+    document.getElementById('add-note-btn').addEventListener('click', () => {
+      document.getElementById('note-form').reset();
+      document.getElementById('edit-note-id').value = '';
+      document.getElementById('note-modal-title').textContent = 'Add Encrypted Note';
+      openModal('note-modal');
+    });
+
+    // 7. Category Filter Chips
+    document.getElementById('category-chips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.filter-chip');
+      if (!chip) return;
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentCategory = chip.dataset.category;
+      renderItems();
+    });
+
+    // 8. Search Input
+    document.getElementById('vault-search').addEventListener('input', () => {
+      renderItems();
+    });
+
+    // 9. Document Upload Handler
+    document.getElementById('upload-submit-btn').addEventListener('click', async () => {
+      const title = document.getElementById('doc-title').value.trim();
+      const category = document.getElementById('doc-category').value;
+      const fileInput = document.getElementById('doc-file');
+      const submitBtn = document.getElementById('upload-submit-btn');
+      const progressBox = document.getElementById('upload-progress-box');
+      const progressText = document.getElementById('upload-progress-text');
+
+      if (!title) {
+        Toast.show('Please enter a document title', 'warning');
+        return;
+      }
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        Toast.show('Please select a file to upload', 'warning');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (file.size > 15 * 1024 * 1024) {
+        Toast.show('File size cannot exceed 15MB', 'error');
+        return;
+      }
+
+      try {
+        submitBtn.disabled = true;
+        progressBox.style.display = 'block';
+        progressText.textContent = 'Encrypting with AES-256-GCM in browser...';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const encryptedFile = await VaultCrypto.encryptBinary(arrayBuffer);
+        const encryptedTitle = await VaultCrypto.encryptText(title);
+        const encryptedFilename = await VaultCrypto.encryptText(file.name);
+
+        progressText.textContent = 'Uploading ciphertext to Joy S3...';
+
+        const formData = new FormData();
+        formData.append('ciphertext_file', encryptedFile.ciphertextBlob, 'document.enc');
+        formData.append('title_encrypted', encryptedTitle.ciphertextBase64);
+        formData.append('original_filename_encrypted', encryptedFilename.ciphertextBase64);
+        formData.append('mime_type', file.type || 'application/octet-stream');
+        formData.append('category', category);
+        formData.append('encryption_metadata', JSON.stringify({
+          alg: encryptedFile.alg,
+          iv: encryptedFile.ivHex,
+          title_iv: encryptedTitle.ivHex,
+          filename_iv: encryptedFilename.ivHex
+        }));
+
+        const uploadRes = await fetch('/api/v1/admin/vault/documents', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+
+        if (!uploadRes.ok) {
+          let errText = 'Failed to upload document';
+          try {
+            const errData = await uploadRes.json();
+            errText = errData.detail || errData.message || errText;
+          } catch (_) {}
+          throw new Error(errText);
+        }
+
+        Toast.show('Encrypted document saved successfully', 'success');
+        closeModal('upload-doc-modal');
+        await loadVaultItems();
+      } catch (err) {
+        Toast.show(err.message || 'Failed to upload document', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        progressBox.style.display = 'none';
+      }
+    });
+
+    // 10. Note Save Handler (Create / Edit)
+    document.getElementById('save-note-btn').addEventListener('click', async () => {
+      const editId = document.getElementById('edit-note-id').value;
+      const title = document.getElementById('note-title').value.trim();
+      const category = document.getElementById('note-category').value;
+      const content = document.getElementById('note-content').value.trim();
+      const submitBtn = document.getElementById('save-note-btn');
+
+      if (!title) {
+        Toast.show('Please enter a note title', 'warning');
+        return;
+      }
+      if (!content) {
+        Toast.show('Please enter note content', 'warning');
+        return;
+      }
+
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Encrypting...';
+
+        const encryptedTitle = await VaultCrypto.encryptText(title);
+        const encryptedContent = await VaultCrypto.encryptText(content);
+
+        const payload = {
+          title_encrypted: encryptedTitle.ciphertextBase64,
+          content_encrypted: encryptedContent.ciphertextBase64,
+          category: category,
+          encryption_metadata: {
+            alg: 'AES-256-GCM',
+            title_iv: encryptedTitle.ivHex,
+            content_iv: encryptedContent.ivHex
+          }
+        };
+
+        if (editId) {
+          await API.put(`/api/v1/admin/vault/${editId}`, payload);
+          Toast.show('Note updated successfully', 'success');
+        } else {
+          await API.post('/api/v1/admin/vault/notes', payload);
+          Toast.show('Encrypted note saved successfully', 'success');
+        }
+
+        closeModal('note-modal');
+        await loadVaultItems();
+      } catch (err) {
+        Toast.show(err.message || 'Failed to save note', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Encrypt & Save';
+      }
+    });
+
+    // 11. Copy Note Text Button
+    document.getElementById('copy-note-btn')?.addEventListener('click', () => {
+      const text = document.getElementById('preview-note-body').textContent;
+      navigator.clipboard.writeText(text).then(() => Toast.show('Copied to clipboard', 'success'));
+    });
+
+    // 12. Restore existing active session in this tab
+    try {
+      if (!currentUser || !currentUser.id) {
+        currentUser = await API.get('/api/v1/auth/me', { silent: true, cache: false });
+      }
+      if (currentUser && currentUser.id) {
+        const restored = await VaultCrypto.tryRestoreTabSession(currentUser.id);
+        if (restored || VaultCrypto.isUnlocked()) {
+          await showUnlockedView();
+        } else {
+          showLockedView();
+        }
+      } else {
+        showLockedView();
+      }
+    } catch (sessionErr) {
+      console.warn('Vault tab session check warning:', sessionErr);
+      showLockedView();
+    }
+  })();
+
+  function showLockedView() {
+    const lockedView = document.getElementById('vault-locked-view');
+    const unlockedView = document.getElementById('vault-unlocked-view');
+    if (lockedView) lockedView.style.display = 'block';
+    if (unlockedView) unlockedView.style.display = 'none';
+    const pw = document.getElementById('vault-passphrase');
+    if (pw) {
+      pw.value = '';
+      pw.focus();
+    }
+  }
+
+  async function showUnlockedView() {
+    const lockedView = document.getElementById('vault-locked-view');
+    const unlockedView = document.getElementById('vault-unlocked-view');
+    if (lockedView) lockedView.style.display = 'none';
+    if (unlockedView) unlockedView.style.display = 'block';
+    await loadVaultItems();
+  }
+
+  window.addEventListener('vault:lock', () => showLockedView());
+  window.addEventListener('vault:unlock', () => showUnlockedView());
+  window.addEventListener('akriti-theme-change', () => {
+    if (VaultCrypto.isUnlocked()) {
+      const unlockedView = document.getElementById('vault-unlocked-view');
+      const lockedView = document.getElementById('vault-locked-view');
+      if (lockedView) lockedView.style.display = 'none';
+      if (unlockedView && unlockedView.style.display !== 'block') {
+        unlockedView.style.display = 'block';
+      }
+    }
+  });
+
+  async function loadVaultItems() {
+    const skeletons = document.getElementById('vault-skeletons');
+    const itemsGrid = document.getElementById('vault-items-grid');
+    const emptyState = document.getElementById('vault-empty-state');
+
+    skeletons.style.display = 'grid';
+    itemsGrid.style.display = 'none';
+    emptyState.style.display = 'none';
+
+    try {
+      vaultItems = await API.get('/api/v1/admin/vault');
+      // Decrypt titles and notes client-side in parallel
+      decryptedItems = await Promise.all(vaultItems.map(async (item) => {
+        let decTitle = '[Encrypted Title]';
+        let decContent = '';
+        let decFilename = '';
+
+        try {
+          const titleIv = item.encryption_metadata?.title_iv || item.encryption_metadata?.iv;
+          decTitle = await VaultCrypto.decryptText(item.title_encrypted, titleIv);
+        } catch (e) {
+          decTitle = '⚠️ [Decryption Failed]';
+        }
+
+        if (item.item_type === 'note' && item.content_encrypted) {
+          try {
+            const contentIv = item.encryption_metadata?.content_iv || item.encryption_metadata?.iv;
+            decContent = await VaultCrypto.decryptText(item.content_encrypted, contentIv);
+          } catch (e) {
+            decContent = '⚠️ [Content Decryption Failed]';
+          }
+        }
+
+        if (item.original_filename_encrypted) {
+          try {
+            const fnIv = item.encryption_metadata?.filename_iv;
+            decFilename = await VaultCrypto.decryptText(item.original_filename_encrypted, fnIv);
+          } catch (e) {
+            decFilename = 'document.bin';
+          }
+        }
+
+        return {
+          ...item,
+          decTitle,
+          decContent,
+          decFilename
+        };
+      }));
+
+      renderItems();
+    } catch (err) {
+      Toast.show('Failed to load vault items: ' + (err.message || ''), 'error');
+    } finally {
+      skeletons.style.display = 'none';
+      itemsGrid.style.display = 'grid';
+    }
+  }
+
+  function renderItems() {
+    const grid = document.getElementById('vault-items-grid');
+    const emptyState = document.getElementById('vault-empty-state');
+    const searchQuery = (document.getElementById('vault-search').value || '').toLowerCase().trim();
+
+    const filtered = decryptedItems.filter(item => {
+      // Category filter
+      if (currentCategory !== 'all' && (item.category || '').toLowerCase() !== currentCategory.toLowerCase()) {
+        return false;
+      }
+      // Search filter
+      if (searchQuery) {
+        const inTitle = (item.decTitle || '').toLowerCase().includes(searchQuery);
+        const inContent = (item.decContent || '').toLowerCase().includes(searchQuery);
+        const inCategory = (item.category || '').toLowerCase().includes(searchQuery);
+        if (!inTitle && !inContent && !inCategory) return false;
+      }
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      grid.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+
+    emptyState.style.display = 'none';
+    grid.innerHTML = filtered.map(item => {
+      const isNote = item.item_type === 'note';
+      const iconSvg = isNote
+        ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`
+        : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+
+      const sizeStr = item.file_size_bytes ? `${Math.round(item.file_size_bytes / 1024)} KB` : '';
+      const dateStr = new Date(item.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      let bodyHtml = '';
+      if (isNote) {
+        bodyHtml = `<div class="vault-card-body">${escapeHtml(item.decContent || '')}</div>`;
+      } else {
+        bodyHtml = `
+          <div class="vault-card-body" style="font-family:monospace;font-size:11px;color:var(--color-ink-lighter);">
+            <div>MIME: ${escapeHtml(item.mime_type || 'binary')}</div>
+            <div>File: ${escapeHtml(item.decFilename || item.decTitle)}</div>
+          </div>`;
+      }
+
+      return `
+        <div class="vault-card">
+          <div>
+            <div class="vault-card-header">
+              <div class="vault-card-icon">${iconSvg}</div>
+              <div style="flex:1;min-width:0;">
+                <h4 class="vault-card-title">${escapeHtml(item.decTitle)}</h4>
+                <div class="vault-card-meta">
+                  <span class="badge badge-neutral">${escapeHtml(item.category || 'General')}</span>
+                  ${sizeStr ? `<span>• ${sizeStr}</span>` : ''}
+                  <span>• ${dateStr}</span>
+                </div>
+              </div>
+            </div>
+            ${bodyHtml}
+          </div>
+          <div class="vault-card-footer">
+            <div style="display:flex;gap:6px;">
+              ${isNote ? `
+                <button class="btn btn-secondary btn-sm" onclick="previewNote('${item.id}')">View</button>
+                <button class="btn btn-secondary btn-sm" onclick="editNote('${item.id}')">Edit</button>
+              ` : `
+                <button class="btn btn-secondary btn-sm" onclick="downloadDecryptedDocument('${item.id}')">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download
+                </button>
+              `}
+            </div>
+            <button class="btn btn-secondary btn-sm text-error" onclick="deleteVaultItem('${item.id}', '${escapeHtml(item.decTitle)}')" title="Permanently delete from S3 & database">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function previewNote(id) {
+    const item = decryptedItems.find(i => i.id === id);
+    if (!item) return;
+    document.getElementById('preview-note-title').textContent = item.decTitle;
+    document.getElementById('preview-note-category').textContent = item.category || 'Note';
+    document.getElementById('preview-note-body').textContent = item.decContent;
+    openModal('preview-note-modal');
+  }
+
+  function editNote(id) {
+    const item = decryptedItems.find(i => i.id === id);
+    if (!item) return;
+    document.getElementById('edit-note-id').value = item.id;
+    document.getElementById('note-title').value = item.decTitle;
+    document.getElementById('note-category').value = item.category || 'Private Notes';
+    document.getElementById('note-content').value = item.decContent;
+    document.getElementById('note-modal-title').textContent = 'Edit Encrypted Note';
+    openModal('note-modal');
+  }
+
+  async function downloadDecryptedDocument(id) {
+    const item = decryptedItems.find(i => i.id === id);
+    if (!item) return;
+
+    try {
+      Toast.show('Downloading encrypted ciphertext from Joy S3...', 'info');
+      const response = await fetch(`/api/v1/admin/vault/${id}/content`, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/octet-stream' }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to retrieve ciphertext from server (HTTP ${response.status})`);
+      }
+
+      Toast.show('Decrypting document with AES-256-GCM in browser...', 'info');
+      const ciphertextArrayBuffer = await response.arrayBuffer();
+      const iv = item.encryption_metadata?.iv;
+
+      const decryptedBuffer = await VaultCrypto.decryptBinary(ciphertextArrayBuffer, iv);
+      const mime = item.mime_type || 'application/octet-stream';
+      const blob = new Blob([decryptedBuffer], { type: mime });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = item.decFilename || (item.decTitle + (mime === 'application/pdf' ? '.pdf' : ''));
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      Toast.show('Document decrypted and downloaded', 'success');
+    } catch (err) {
+      Toast.show('Decryption / Download error: ' + (err.message || ''), 'error');
+    }
+  }
+
+  async function deleteVaultItem(id, title) {
+    const ok = await Modal.confirm(
+      'Permanently Delete Item',
+      `Are you sure you want to delete "${title}"? This will cryptographically erase the ciphertext from Joy S3 storage and delete the database record. This action cannot be undone.`,
+      { confirmText: 'Delete Permanently', cancelText: 'Cancel', danger: true }
+    );
+    if (!ok) return;
+
+    try {
+      await API.delete(`/api/v1/admin/vault/${id}`);
+      Toast.show('Vault item permanently deleted', 'success');
+      await loadVaultItems();
+    } catch (err) {
+      Toast.show(err.message || 'Failed to delete item', 'error');
+    }
+  }
+</script>
+</body>
+</html>

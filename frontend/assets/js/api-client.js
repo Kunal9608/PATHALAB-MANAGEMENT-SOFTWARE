@@ -72,8 +72,9 @@ const API = (() => {
       return activeRequests.get(requestKey);
     }
 
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
     const headers = {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(options.headers || {}),
     };
 
@@ -89,7 +90,7 @@ const API = (() => {
     };
 
     if (body !== null) {
-      init.body = JSON.stringify(body);
+      init.body = isFormData ? body : JSON.stringify(body);
     }
 
     const reqPromise = (async () => {
@@ -274,11 +275,12 @@ const API = (() => {
   }
 
     return {
-      get:    (path, opts)         => request('GET',    path, null, opts),
-      post:   (path, body, opts)   => request('POST',   path, body, opts),
-      patch:  (path, body, opts)   => request('PATCH',  path, body, opts),
-      put:    (path, body, opts)   => request('PUT',    path, body, opts),
-      delete: (path, opts)         => request('DELETE', path, null, opts),
+      get:      (path, opts)         => request('GET',    path, null, opts),
+      post:     (path, body, opts)   => request('POST',   path, body, opts),
+      postForm: (path, formData, opts) => request('POST', path, formData, opts),
+      patch:    (path, body, opts)   => request('PATCH',  path, body, opts),
+      put:      (path, body, opts)   => request('PUT',    path, body, opts),
+      delete:   (path, opts)         => request('DELETE', path, null, opts),
       // Raw request with full control
       raw:    (method, path, body, opts) => request(method, path, body, opts),
       uuidv4,

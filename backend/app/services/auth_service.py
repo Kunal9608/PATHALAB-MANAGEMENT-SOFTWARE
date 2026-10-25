@@ -33,6 +33,7 @@ _fail_counts: dict[str, tuple[float, int]] = {}   # email -> (expire_timestamp, 
 _lockouts: dict[str, float] = {}                  # email -> expire_timestamp
 _otp_req_counts: dict = {}
 _otp_fail_counts: dict = {}
+_otp_cooldowns: dict[str, float] = {}             # f"{email}:{purpose}" -> expire_timestamp
 _consumed_reset_tokens: dict[str, float] = {}     # token_identifier -> expire_timestamp
 
 
@@ -421,9 +422,28 @@ def login(db: Session, email: str, password: str, ip: str,
 
 def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
     email = email.lower().strip()
-
-    # Rate limiting: max 3 OTPs per 10 min per email
     r = get_redis()
+    now_ts = time.time()
+    cooldown_key = f"otp_cooldown:{email}:{purpose}"
+
+    # 1. 60-second cooldown enforcement per (email, purpose)
+    if r:
+        try:
+            ttl = r.ttl(cooldown_key)
+            if ttl and ttl > 0:
+                raise PermissionError(f"Please wait {ttl} seconds before requesting another OTP.")
+        except PermissionError:
+            raise
+        except Exception as e:
+            logger.warning(f"Redis cooldown check warning: {e}")
+    else:
+        with _auth_lock:
+            exp_ts = _otp_cooldowns.get(f"{email}:{purpose}", 0)
+            if now_ts < exp_ts:
+                remaining = int(exp_ts - now_ts) + 1
+                raise PermissionError(f"Please wait {max(1, remaining)} seconds before requesting another OTP.")
+
+    # 2. Rate limiting: max 3 OTPs per 10 min per email
     if r:
         rl_key = f"otp_rate:{email}"
         count = r.get(rl_key)
@@ -443,8 +463,15 @@ def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
 
     user = user_repo.get_by_email(db, email)
     if not user:
-        # Prevent account enumeration: return True silently without creating OTP or revealing email absence
-        logger.info(f"OTP request for unregistered email suppressed: {email}")
+        # Prevent account enumeration: set cooldown and return True silently without creating OTP
+        if r:
+            try:
+                r.setex(cooldown_key, 60, "1")
+            except Exception:
+                pass
+        with _auth_lock:
+            _otp_cooldowns[f"{email}:{purpose}"] = now_ts + 60.0
+        logger.info(f"OTP request for unregistered email suppressed with cooldown: {email}")
         return True
 
     otp = generate_otp()
@@ -470,7 +497,7 @@ def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
     }
     event_type = event_type_map.get(purpose, "otp")
 
-    # Send notification synchronously so failures throw a 503 instead of silent failing
+    # Send notification synchronously so failures throw an error instead of silent failing
     try:
         notification_service.notify(event_type, email, {"otp": otp, "name": user.name})
     except Exception as e:
@@ -479,7 +506,16 @@ def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
         db.delete(otp_obj)
         db.commit()
         raise PermissionError("Failed to send OTP. Please check service configuration.")
-        
+
+    # Set 60-second cooldown after successful dispatch
+    if r:
+        try:
+            r.setex(cooldown_key, 60, "1")
+        except Exception as e:
+            logger.warning(f"Failed to set Redis cooldown: {e}")
+    with _auth_lock:
+        _otp_cooldowns[f"{email}:{purpose}"] = now_ts + 60.0
+
     # Reset OTP failure counter for this email
     if r:
         r.delete(f"otp_fail:{email}")

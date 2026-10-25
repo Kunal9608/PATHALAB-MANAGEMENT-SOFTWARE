@@ -114,8 +114,14 @@ def request_otp(payload: OtpRequestSchema, request: Request, db: Session = Depen
         raise HTTPException(status_code=400, detail="reCAPTCHA verification failed. Please try again.")
 
     ip = get_client_ip(request)
-    auth_service.request_otp(db, payload.email, payload.purpose, ip)
-    return {"message": "OTP sent if email is registered"}
+    try:
+        auth_service.request_otp(db, payload.email, payload.purpose, ip)
+    except PermissionError as e:
+        msg = str(e)
+        if "wait" in msg.lower():
+            raise HTTPException(status_code=429, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+    return {"message": "OTP request accepted. Please check your registered email."}
 
 
 @router.post("/otp/verify")

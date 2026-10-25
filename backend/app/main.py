@@ -190,7 +190,8 @@ async def add_security_headers(request: Request, call_next):
         "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.google.com/; "
         "frame-ancestors 'none';"
     )
-    response.headers["Content-Security-Policy"] = csp_directives
+    if "Content-Security-Policy" not in response.headers:
+        response.headers["Content-Security-Policy"] = csp_directives
     
     # 2. Prevent clickjacking
     response.headers["X-Frame-Options"] = "DENY"

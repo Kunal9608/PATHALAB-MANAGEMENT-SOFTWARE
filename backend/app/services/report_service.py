@@ -49,22 +49,33 @@ def upload_report(db: Session, patient_id: uuid.UUID, file_bytes: bytes,
             uploader_name = existing.uploader.name if existing.uploader else "Unknown"
             raise ValueError(f"DUPLICATE_REPORT:An identical report was already uploaded as Version {existing.version} by {uploader_name}.")
 
-    # Mark previous reports as not latest
-    db.query(Report).filter(Report.patient_id == patient_id).update({"is_latest": False})
+    # 1. Private Quarantine Staging before approval
+    from backend.app.core.upload_security import (
+        stage_file_in_quarantine,
+        promote_quarantined_file,
+        cleanup_quarantined_file,
+    )
+    from backend.app.core.storage import delete_file_object
 
-    # Get version number
-    version = db.query(Report).filter(Report.patient_id == patient_id).count() + 1
-
-    safe_filename = generate_safe_filename(filename, f"{patient.patient_code}_v{version}")
-
-    from backend.app.core.storage import upload_file_bytes, delete_file_object
+    upload_id = uuid.uuid4().hex
+    quarantine_path = stage_file_in_quarantine(file_bytes, upload_id=upload_id, context="reports")
     db_file_path = None
+
     try:
-        db_file_path = upload_file_bytes(
-            file_bytes=file_bytes,
-            filename=safe_filename,
-            content_type="application/pdf",
-            folder="reports"
+        # Mark previous reports as not latest (within transaction; rolls back if failure occurs)
+        db.query(Report).filter(Report.patient_id == patient_id).update({"is_latest": False})
+
+        # Get version number
+        version = db.query(Report).filter(Report.patient_id == patient_id).count() + 1
+        safe_filename = generate_safe_filename(filename, f"{patient.patient_code}_v{version}")
+
+        # 2. Promote from quarantine to canonical private storage with exact-digest verification
+        db_file_path = promote_quarantined_file(
+            quarantine_path=quarantine_path,
+            target_folder="reports",
+            target_filename=safe_filename,
+            expected_sha256=verification_hash,
+            content_type="application/pdf"
         )
 
         report = Report(
@@ -101,7 +112,8 @@ def upload_report(db: Session, patient_id: uuid.UUID, file_bytes: bytes,
         db.commit()
     except Exception as exc:
         db.rollback()
-        # Compensating cleanup: remove uploaded object/file on DB failure
+        # Compensating cleanup: purge temporary quarantine object and newly promoted file on failure
+        cleanup_quarantined_file(quarantine_path)
         if db_file_path:
             delete_file_object(db_file_path)
         raise exc

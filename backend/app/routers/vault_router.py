@@ -77,19 +77,44 @@ async def upload_vault_document(
 ):
     """
     Upload an encrypted document to the private admin vault.
-    File content is encrypted client-side; only ciphertext bytes are transmitted.
-    Stored securely in Joy S3 with path isolated to vault/{admin_id}/{item_id}.enc.
+    Security Architecture & E2EE Boundary:
+    - File content is encrypted client-side in the browser (AES-256-GCM); the server receives ONLY ciphertext bytes.
+    - True Zero-Knowledge server storage: The server does NOT possess the vault key and cannot decrypt or parse the content.
+    - The server does NOT claim to scan ciphertext with plaintext antivirus scanners (preserving true E2EE).
+    - Enforces:
+        1. Strict Administrator-only role gate
+        2. Streaming read bounded to 15MB (DoS prevention)
+        3. Encryption envelope metadata schema validation
+        4. Strict isolation: stored at vault/{admin_id}/{item_id}.enc
+        5. Zero execution/parsing of ciphertext bytes
     """
+    # 1. Parse and validate encryption metadata envelope
     try:
         metadata_dict = json.loads(encryption_metadata) if encryption_metadata else {}
+        if not isinstance(metadata_dict, dict):
+            raise ValueError("encryption_metadata must be a JSON object")
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid encryption_metadata JSON")
+        raise HTTPException(status_code=400, detail="Invalid encryption_metadata JSON envelope")
 
-    ciphertext_bytes = await ciphertext_file.read()
+    # 2. Bounded streaming read (max 15MB)
+    from backend.app.core.upload_security import read_upload_file_bounded
+    max_vault_size = 15 * 1024 * 1024  # 15 MB
+    try:
+        ciphertext_bytes = await read_upload_file_bounded(ciphertext_file, max_size=max_vault_size)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     file_size_bytes = len(ciphertext_bytes)
-
     if file_size_bytes == 0:
-        raise HTTPException(status_code=400, detail="Uploaded document is empty")
+        raise HTTPException(status_code=400, detail="Uploaded ciphertext document is empty (0 bytes)")
+
+    # 3. Validate metadata constraints
+    if not title_encrypted or len(title_encrypted.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Encrypted title is required")
+    if len(title_encrypted) > 4096:
+        raise HTTPException(status_code=400, detail="Encrypted title length exceeds safe limit")
+
+    clean_category = (category or "General").strip()[:50]
 
     return vault_service.create_document(
         db=db,
@@ -100,7 +125,7 @@ async def upload_vault_document(
         file_size_bytes=file_size_bytes,
         ciphertext_bytes=ciphertext_bytes,
         encryption_metadata=metadata_dict,
-        category=category or "General"
+        category=clean_category
     )
 
 
@@ -110,7 +135,7 @@ def get_vault_item(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Retrieve metadata of a specific vault item belonging to the current admin."""
+    """Retrieve metadata of a specific vault item belonging strictly to the current admin."""
     item = vault_service.get_item(db, admin_id=current_user.id, item_id=item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Vault item not found")
@@ -125,7 +150,10 @@ def download_vault_document_ciphertext(
 ):
     """
     Download raw ciphertext bytes of an encrypted vault document.
-    Client decrypts the ciphertext in-memory using its local vault key.
+    Access Control & Safe Download:
+    - Restricted to the owning administrator only (cross-admin access blocked with 404/403).
+    - Client decrypts ciphertext in-memory using its local vault key.
+    - Protected with nosniff, CSP default-src 'none', X-Frame-Options DENY, and no-store caching.
     """
     item, ciphertext_bytes = vault_service.download_document(db, admin_id=current_user.id, item_id=item_id)
     return Response(
@@ -133,8 +161,14 @@ def download_vault_document_ciphertext(
         media_type="application/octet-stream",
         headers={
             "Content-Disposition": f'attachment; filename="{item_id}.enc"',
+            "Content-Type": "application/octet-stream",
             "X-Item-Type": item.item_type,
-            "X-Encrypted-Original-Mime": item.mime_type or "application/octet-stream"
+            "X-Encrypted-Original-Mime": item.mime_type or "application/octet-stream",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none';",
+            "X-Frame-Options": "DENY",
+            "Cache-Control": "private, no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache"
         }
     )
 

@@ -79,16 +79,17 @@ async def face_enroll(staff_id: str, image: UploadFile = File(...),
         )
     
     # Stream read with strict maximum limit to prevent memory exhaustion
-    from backend.app.core.upload_security import read_upload_file_bounded, validate_file_upload
+    from backend.app.core.upload_security import read_upload_file_bounded, execute_secure_upload_pipeline
     allowed_image_exts = (".jpg", ".jpeg", ".png", ".webp")
     max_enroll_size = 10 * 1024 * 1024  # 10MB
     try:
         image_bytes = await read_upload_file_bounded(image, max_size=max_enroll_size)
-        validate_file_upload(
+        pipeline_res = execute_secure_upload_pipeline(
             file_bytes=image_bytes,
-            filename=image.filename,
+            original_filename=image.filename,
+            allowed_extensions=allowed_image_exts,
             max_size=max_enroll_size,
-            allowed_extensions=allowed_image_exts
+            context="face_enroll"
         )
     except ValueError as e:
         raise HTTPException(

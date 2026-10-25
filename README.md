@@ -325,10 +325,9 @@ python scratch/test_master_verification.py
 
 ---
 
-## 👥 Authors & Maintainers
+## 👤 Author & Maintainer
 
-* **Lead Architect & Developer**: Kunal ([@Kunal9608](https://github.com/Kunal9608))
-* **Organization**: Akriti Diagnostics Center ([akritidc.in](https://akritidc.in))
+* **Author & Maintainer**: Kunal Dixit ([@Kunal9608](https://github.com/Kunal9608))
 
 <div align="center">
   <sub>Engineered with precision for diagnostic accuracy, data privacy, and clinical operational excellence.</sub>

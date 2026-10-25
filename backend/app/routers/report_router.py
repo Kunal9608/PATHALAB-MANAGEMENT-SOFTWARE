@@ -26,36 +26,59 @@ def upload_report(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    FR-7.1 — Universal Secure Patient Diagnostic Report Upload.
+    Enforces:
+    1. Role gate (Admin/Staff only)
+    2. Patient relation & ownership authorization (anti-IDOR)
+    3. Stream bounded read (DoS defense)
+    4. Universal multi-layer file security pipeline (magic bytes, exploit inspection, anti-malware)
+    5. Conversion of clinical images to strictly validated PDF
+    6. Quarantine staging & atomic promotion with exact SHA-256 verification
+    """
+    from backend.app.models.user import RoleEnum
+    if current_user.role not in (RoleEnum.admin, RoleEnum.staff):
+        raise HTTPException(
+            status_code=403,
+            detail="Only laboratory staff and administrators are authorized to upload diagnostic reports"
+        )
+
+    # 1. Authorize patient access before processing file
+    from backend.app.repositories import patient_repo
+    patient = patient_repo.get_by_id(db, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    check_patient_access(current_user, patient)
+
     filename_lower = file.filename.lower()
-    
-    # All accepted extensions — images + PDF
     image_exts = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".heif")
     allowed_extensions = (".pdf",) + image_exts
-    
-    # 1. Read file bytes synchronously with strict streaming bound
-    from backend.app.core.upload_security import read_sync_file_bounded, validate_file_upload
     max_report_size = 3 * 1024 * 1024  # 3MB limit for report uploads
+
+    # 2. Read file bytes synchronously with strict streaming bound
+    from backend.app.core.upload_security import (
+        read_sync_file_bounded,
+        execute_secure_upload_pipeline,
+        validate_pdf_structure
+    )
     try:
         file_bytes = read_sync_file_bounded(file.file, max_size=max_report_size)
-        sanitized_filename = validate_file_upload(
+        pipeline_result = execute_secure_upload_pipeline(
             file_bytes=file_bytes,
-            filename=file.filename,
+            original_filename=file.filename,
+            allowed_extensions=allowed_extensions,
             max_size=max_report_size,
-            allowed_extensions=allowed_extensions
+            context="patient_report"
         )
+        sanitized_filename = pipeline_result.sanitized_filename
     except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=400, detail=str(e))
 
-    file.filename = sanitized_filename
-
-    # 3. Convert any image format to PDF (CPU-bound compression executed before checking out DB connection)
-    if any(filename_lower.endswith(ext) for ext in image_exts):
+    # 3. Convert any image format to PDF and validate structural integrity of generated PDF
+    if any(sanitized_filename.lower().endswith(ext) for ext in image_exts):
         from PIL import Image
         import io
-        
+
         def _convert_to_pdf(f_bytes):
             img = Image.open(io.BytesIO(f_bytes))
             try:
@@ -64,45 +87,39 @@ def upload_report(
                 pass
             if img.mode not in ("RGB", "L"):
                 img = img.convert("RGB")
-            
-            # Step 1: Compress to ensure PDF stays under 2.5MB
+
+            # Compress to ensure PDF stays under 2.5MB
             max_dim = 1200
             if img.width > max_dim or img.height > max_dim:
                 img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
-                
+
             pdf_io = io.BytesIO()
             img.save(pdf_io, format="PDF", resolution=72.0)
             output_bytes = pdf_io.getvalue()
-            
-            # Step 2: Aggressive compression if it's still > 2.5MB
+
             if len(output_bytes) > 2.5 * 1024 * 1024:
                 img.thumbnail((800, 800), Image.Resampling.LANCZOS)
                 pdf_io = io.BytesIO()
                 img.save(pdf_io, format="PDF", resolution=72.0)
                 output_bytes = pdf_io.getvalue()
-                
+
             return output_bytes
 
         try:
             file_bytes = _convert_to_pdf(file_bytes)
-            base_name = os.path.splitext(file.filename)[0]
-            file.filename = f"{base_name}.pdf"
+            # Validate output PDF structure
+            validate_pdf_structure(file_bytes)
+            base_name = os.path.splitext(sanitized_filename)[0]
+            sanitized_filename = f"{base_name}.pdf"
         except Exception as e:
             raise HTTPException(
                 status_code=400,
-                detail=f"Failed to convert image to PDF: {str(e)}"
+                detail=f"Failed to convert image to PDF safely: {str(e)}"
             )
-
-    # 4. Defer DB checkout and transaction until file processing completes
-    from backend.app.repositories import patient_repo
-    patient = patient_repo.get_by_id(db, patient_id)
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    check_patient_access(current_user, patient)
 
     try:
         return report_service.upload_report(
-            db, patient_id, file_bytes, file.filename, current_user.id, background_tasks,
+            db, patient_id, file_bytes, sanitized_filename, current_user.id, background_tasks,
             reason=reason, force=force, partial_release=partial_release
         )
     except ValueError as e:
@@ -110,6 +127,7 @@ def upload_report(
         if msg.startswith("DUPLICATE_REPORT:"):
             raise HTTPException(status_code=409, detail=msg.split(":", 1)[1])
         raise HTTPException(status_code=400, detail=msg)
+
 
 
 
@@ -173,7 +191,13 @@ def download_report(report_id: uuid.UUID,
     filename = report.original_filename or 'report.pdf'
     
     headers = {
-        "Content-Disposition": f"{disposition}; filename=\"{filename}\""
+        "Content-Disposition": f"{disposition}; filename=\"{filename}\"",
+        "Content-Type": "application/pdf",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none';",
+        "X-Frame-Options": "DENY",
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
     }
 
     from backend.app.core.storage import download_file_bytes
@@ -311,52 +335,75 @@ async def upload_test_attachment(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Upload an image or PDF attachment (e.g., X-Ray, USG, ECG scan) for a specific test during result entry."""
+    """
+    Upload an image or PDF attachment (e.g., X-Ray, USG, ECG scan) for a specific test during result entry.
+    Enforces role authorization, patient access, quarantine staging, and exact-object promotion.
+    """
+    from backend.app.models.user import RoleEnum
+    if current_user.role not in (RoleEnum.admin, RoleEnum.staff):
+        raise HTTPException(
+            status_code=403,
+            detail="Only laboratory staff and administrators are authorized to upload test attachments"
+        )
+
     from backend.app.repositories import patient_repo
     patient = patient_repo.get_by_id(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    check_patient_access(current_user, patient)
+
     # Verify test_id belongs to patient's booked tests
     booked_test_ids = {pt.test_id for pt in (patient.patient_tests or [])}
     if test_id not in booked_test_ids:
         raise HTTPException(status_code=400, detail="Test ID is not booked for this patient.")
 
-    attach_dir = Path("uploads/attachments")
-    attach_dir.mkdir(parents=True, exist_ok=True)
-
-    from backend.app.core.upload_security import read_upload_file_bounded, validate_file_upload
+    from backend.app.core.upload_security import (
+        read_upload_file_bounded,
+        execute_secure_upload_pipeline,
+        stage_file_in_quarantine,
+        promote_quarantined_file,
+        cleanup_quarantined_file
+    )
     max_att_size = 15 * 1024 * 1024  # 15MB limit
+    allowed_att_extensions = (".pdf", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif")
+
     try:
         file_bytes = await read_upload_file_bounded(file, max_size=max_att_size)
-        sanitized_filename = validate_file_upload(
+        pipeline_result = execute_secure_upload_pipeline(
             file_bytes=file_bytes,
-            filename=file.filename,
+            original_filename=file.filename,
+            allowed_extensions=allowed_att_extensions,
             max_size=max_att_size,
-            allowed_extensions=(".pdf", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".heif")
+            context="test_attachment"
         )
-        file.filename = sanitized_filename
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    safe_name = report_service.generate_safe_filename(file.filename, f"{patient.patient_code}_{test_id.hex[:8]}")
-    
-    from backend.app.core.storage import upload_file_bytes
-    content_type = file.content_type or "application/octet-stream"
+    upload_id = uuid.uuid4().hex
+    quarantine_path = stage_file_in_quarantine(file_bytes, upload_id=upload_id, context="attachments")
+
+    safe_name = report_service.generate_safe_filename(
+        pipeline_result.sanitized_filename,
+        f"{patient.patient_code}_{test_id.hex[:8]}"
+    )
+
     try:
-        db_file_path = upload_file_bytes(
-            file_bytes=file_bytes,
-            filename=safe_name,
-            content_type=content_type,
-            folder="attachments",
+        db_file_path = promote_quarantined_file(
+            quarantine_path=quarantine_path,
+            target_folder="attachments",
+            target_filename=safe_name,
+            expected_sha256=pipeline_result.sha256_hash,
+            content_type=pipeline_result.detected_mime
         )
     except Exception as e:
-        logger.error(f"Failed to upload attachment: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {e}")
+        cleanup_quarantined_file(quarantine_path)
+        logger.error(f"Failed to process and promote test attachment: {e}")
+        raise HTTPException(status_code=500, detail="Failed to safely store attachment")
 
     return {
         "status": "success",
         "attachment_path": db_file_path,
-        "filename": file.filename
+        "filename": pipeline_result.sanitized_filename
     }
 
 

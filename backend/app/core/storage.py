@@ -96,7 +96,9 @@ def upload_file_bytes(
             raise ValueError(f"Storage Error: Failed to upload file to Joy S3: {e}")
 
     # Local Filesystem Fallback
-    target_dir = ATTACHMENTS_DIR if folder == "attachments" else REPORTS_DIR
+    base_uploads = Path("uploads")
+    target_dir = base_uploads / folder if folder else REPORTS_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
     file_path = target_dir / filename
     file_path.write_bytes(file_bytes)
     try:

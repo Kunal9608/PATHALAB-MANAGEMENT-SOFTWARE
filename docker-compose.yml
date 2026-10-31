@@ -38,18 +38,18 @@ services:
     container_name: akriti_whatsapp_service
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:8005:8005"
     env_file:
       - .env
     environment:
-      - WHATSAPP_SERVICE_PORT=3001
+      - WHATSAPP_SERVICE_PORT=8005
       - WHATSAPP_SERVICE_HOST=0.0.0.0
       - WHATSAPP_SESSION_PATH=WHATSAPP/session
       - WHATSAPP_ENABLED=true
     volumes:
       - ./WHATSAPP/session:/app/WHATSAPP/session
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -71,7 +71,7 @@ services:
       - WORKERS=${WORKERS:-2}
       - REDIS_ENABLED=true
       - REDIS_URL=redis://redis:6379/0
-      - WHATSAPP_SERVICE_URL=http://whatsapp:3001
+      - WHATSAPP_SERVICE_URL=http://whatsapp:8005
       - START_INTERNAL_WHATSAPP=false
     dns:
       - 8.8.8.8

@@ -14,7 +14,7 @@ from backend.app.core.security import (
     verify_password, hash_password, create_access_token,
     create_refresh_token, create_short_lived_token, decode_token,
     generate_otp, hash_otp, verify_otp, hash_token,
-    validate_password_policy
+    validate_password_policy, verify_dummy_password
 )
 from backend.app.core.redis_client import get_redis
 from backend.app.repositories import user_repo, session_repo
@@ -320,6 +320,7 @@ def login(db: Session, email: str, password: str, ip: str,
     user = user_repo.get_by_email(db, email)
 
     if user is None:
+        verify_dummy_password(password)
         session_repo.record_login(db, email, "unknown_email", ip, user_agent)
         db.commit()
         raise HTTPException(status_code=401, detail="Invalid credentials")

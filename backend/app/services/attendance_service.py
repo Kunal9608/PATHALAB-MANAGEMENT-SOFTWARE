@@ -61,30 +61,12 @@ def log_attendance(db: Session, user_id: uuid.UUID, confidence: float,
 
 def recognize_and_log(db: Session, image_bytes: bytes,
                       device_id: Optional[str] = None) -> dict:
-    """FR-3.1 + FR-3.2 — Face recognition pipeline."""
-    result = face_service.recognize(db, image_bytes)
-
-    if not result["matched"]:
-        # FR-3.2: Low-confidence fallback — do NOT silently log
-        return {
-            "matched": False,
-            "reason": result.get("reason", "Face not recognized"),
-            "confidence": result.get("confidence", 0.0),
-        }
-
-    user_id = uuid.UUID(result["user_id"])
-    confidence = result["confidence"]
-
-    try:
-        return log_attendance(db, user_id, confidence, device_id)
-    except ValueError as e:
-        return {
-            "matched": True,
-            "cooldown": True,
-            "reason": str(e),
-            "confidence": confidence,
-            "message": str(e)
-        }
+    """Biometric face recognition attendance is intentionally disabled in PathLab OS (SEC-02, SEC-04)."""
+    return {
+        "matched": False,
+        "reason": "Biometric face recognition attendance is intentionally disabled in PathLab OS",
+        "confidence": 0.0,
+    }
 
 
 

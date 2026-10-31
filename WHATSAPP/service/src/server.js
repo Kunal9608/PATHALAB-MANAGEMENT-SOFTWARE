@@ -128,23 +128,35 @@ app.post('/messages/send', async (req, res) => {
   }
 });
 
-// Start Express Server
-const server = app.listen(config.port, config.host, async () => {
-  console.log(`[WhatsApp Service] Running on http://${config.host}:${config.port}`);
-  // Auto-restore connection if session exists
-  await connectionManager.initialize(true);
-});
+// Start Express Server only when run as main script
+let server = null;
+function startServer() {
+  server = app.listen(config.port, config.host, async () => {
+    console.log(`[WhatsApp Service] Running on http://${config.host}:${config.port}`);
+    // Auto-restore connection if session exists
+    await connectionManager.initialize(true);
+  });
+  return server;
+}
+
+if (require.main === module) {
+  startServer();
+}
 
 // Graceful shutdown
 const shutdown = async () => {
   console.log('[WhatsApp Service] Shutting down gracefully...');
-  server.close(async () => {
-    try {
-      const sock = connectionManager.getSocket();
-      if (sock) sock.end(undefined);
-    } catch {}
+  if (server) {
+    server.close(async () => {
+      try {
+        const sock = connectionManager.getSocket();
+        if (sock) sock.end(undefined);
+      } catch {}
+      process.exit(0);
+    });
+  } else {
     process.exit(0);
-  });
+  }
 };
 
 process.on('SIGTERM', shutdown);
@@ -159,4 +171,4 @@ process.on('unhandledRejection', (reason) => {
   console.error('[WhatsApp Unhandled Rejection]:', reason);
 });
 
-module.exports = { app, server };
+module.exports = { app, server, startServer };

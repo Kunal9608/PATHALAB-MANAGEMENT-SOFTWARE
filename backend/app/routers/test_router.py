@@ -76,8 +76,7 @@ def create_test(
     admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    # map description -> category if provided
-    category = getattr(payload, 'description', None) or payload.category
+    category = payload.category or getattr(payload, 'description', None)
     return test_service.create_test(db, payload.name, payload.price, category, admin.id)
 
 
@@ -88,8 +87,7 @@ def update_test(
     admin=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    # If description provided, treat as category update
-    if payload.description is not None and payload.category is None:
+    if payload.category is None and payload.description is not None:
         payload.category = payload.description
     return test_service.update_test(db, test_id, payload, admin.id)
 
@@ -136,6 +134,7 @@ def save_test_parameters(
 
 
 @test_router.post("/seed-parameters")
+@test_router.post("/seed-standard-catalog")
 def seed_parameters_endpoint(
     admin=Depends(require_admin),
     db: Session = Depends(get_db),
@@ -143,7 +142,7 @@ def seed_parameters_endpoint(
     """Admin endpoint to trigger pre-population of test parameters for standard tests."""
     from backend.seed.seed_parameters import seed_test_parameters
     count = seed_test_parameters(db)
-    return {"status": "ok", "seeded_tests_count": count}
+    return {"status": "ok", "seeded_tests_count": count, "seeded_count": count}
 
 
 # --- Doctors ---

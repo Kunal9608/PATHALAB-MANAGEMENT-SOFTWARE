@@ -24,8 +24,11 @@ class StaffCreate(BaseModel):
     @field_validator("aadhar")
     @classmethod
     def validate_aadhar(cls, v):
-        if v and not re.match(r"^\d{12}$", v):
-            raise ValueError("Aadhar must be exactly 12 digits")
+        if v:
+            cleaned = re.sub(r"[\s\-]", "", str(v).strip())
+            if not re.match(r"^\d{12}$", cleaned):
+                raise ValueError("Aadhar must be exactly 12 digits")
+            return cleaned
         return v
 
     @field_validator("view_scope")
@@ -55,8 +58,11 @@ class StaffUpdate(BaseModel):
     @field_validator("aadhar")
     @classmethod
     def validate_aadhar(cls, v):
-        if v and not re.match(r"^\d{12}$", v):
-            raise ValueError("Aadhar must be exactly 12 digits")
+        if v:
+            cleaned = re.sub(r"[\s\-]", "", str(v).strip())
+            if not re.match(r"^\d{12}$", cleaned):
+                raise ValueError("Aadhar must be exactly 12 digits")
+            return cleaned
         return v
 
 

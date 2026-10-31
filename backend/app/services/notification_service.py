@@ -347,6 +347,88 @@ class EmailProvider(NotificationProvider):
 
 
 class WhatsAppProvider(NotificationProvider):
+    def _build_whatsapp_message(self, event_type: str, context: Dict[str, Any]) -> str:
+        from backend.app.config import settings
+        patient_name = context.get("patient_name", "Patient")
+        patient_code = context.get("patient_code", "")
+        clean_mobile = "".join(filter(str.isdigit, str(context.get("mobile", ""))))
+        age = context.get("age", "")
+        age_str = f"• Age: *{age} yrs*\n" if age else ""
+        reg_date = context.get("registered_date", "")
+        date_str = f"• Date: *{reg_date}*\n" if reg_date else ""
+
+        if event_type == "report_ready":
+            reg_date_str = f"• Registered Date: *{reg_date}*\n" if reg_date else ""
+            return (
+                f"*{settings.LAB_NAME}*\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🔔 *Diagnostic Report Ready*\n\n"
+                f"Dear *{patient_name}*,\n"
+                f"Your diagnostic test report is now *READY*.\n\n"
+                f"📋 *Patient Details:*\n"
+                f"• Patient ID: *{patient_code}*\n"
+                f"• Name: *{patient_name}*\n"
+                f"{age_str}"
+                f"{reg_date_str}\n"
+                f"📢 *Important Notice:*\n"
+                f"Your report is ready, please collect your printed report from our lab staff / reception desk.\n\n"
+                f"Thank you for choosing *{settings.LAB_NAME}*!"
+            )
+        elif event_type == "patient_registered":
+            mobile_no = context.get("mobile", clean_mobile)
+            total_amt = context.get("total_amount")
+            disc_amt = context.get("discount_amount", 0.0)
+            final_amt = context.get("final_amount") or context.get("net_amount")
+            paid_amt = context.get("amount_paid") or context.get("paid_amount")
+            due_amt = context.get("due_amount")
+
+            billing_lines = ""
+            if total_amt is not None:
+                try:
+                    tot_val = float(total_amt)
+                    disc_val = float(disc_amt) if disc_amt is not None else 0.0
+                    net_val = float(final_amt) if final_amt is not None else max(0.0, tot_val - disc_val)
+                    paid_val = float(paid_amt) if paid_amt is not None else 0.0
+                    due_val = float(due_amt) if due_amt is not None else max(0.0, net_val - paid_val)
+
+                    billing_lines = f"• Total Bill Amount: *₹{tot_val:,.2f}*\n"
+                    if disc_val > 0:
+                        billing_lines += f"• Discount: *₹{disc_val:,.2f}*\n"
+                        billing_lines += f"• Final Payable Amount: *₹{net_val:,.2f}*\n"
+                    if paid_val > 0:
+                        billing_lines += f"• Amount Paid: *₹{paid_val:,.2f}*\n"
+                    if due_val > 0:
+                        billing_lines += f"• Balance Due: *₹{due_val:,.2f}*\n"
+                    else:
+                        billing_lines += f"• Balance Due: *₹0.00 (Fully Paid)*\n"
+                except (ValueError, TypeError):
+                    pass
+
+            return (
+                f"*{settings.LAB_NAME}*\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"✅ *Registration Successful!*\n\n"
+                f"Hello *{patient_name}*,\n"
+                f"You have been successfully registered with our lab.\n\n"
+                f"📋 *Registration Details:*\n"
+                f"• Patient ID: *{patient_code}*\n"
+                f"• Name: *{patient_name}*\n"
+                f"• Mobile: *{mobile_no}*\n"
+                f"{age_str}"
+                f"{date_str}"
+                f"{billing_lines}\n"
+                f"We will notify you on WhatsApp as soon as your diagnostic report is ready.\n\n"
+                f"Thank you for choosing *{settings.LAB_NAME}*!"
+            )
+        elif event_type == "status_update":
+            status = context.get("status", "").replace("_", " ").upper()
+            return (
+                f"*{settings.LAB_NAME}*\n\n"
+                f"Dear *{patient_name}*,\n"
+                f"The status of your sample (Patient ID: *{patient_code}*) is now: *{status}*."
+            )
+        return ""
+
     def send(self, event_type: str, recipient_email: str, context: Dict[str, Any]) -> bool:
         try:
             from backend.app.config import settings
@@ -370,26 +452,7 @@ class WhatsAppProvider(NotificationProvider):
 
             # 1. Report Ready Event — TEXT NOTIFICATION ONLY (No PDF attached)
             if event_type == "report_ready":
-                age = context.get("age", "")
-                age_str = f"• Age: *{age} yrs*\n" if age else ""
-                reg_date = context.get("registered_date", "")
-                date_str = f"• Registered Date: *{reg_date}*\n" if reg_date else ""
-
-                text = (
-                    f"*{settings.LAB_NAME}*\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"🔔 *Diagnostic Report Ready*\n\n"
-                    f"Dear *{patient_name}*,\n"
-                    f"Your diagnostic test report is now *READY*.\n\n"
-                    f"📋 *Patient Details:*\n"
-                    f"• Patient ID: *{patient_code}*\n"
-                    f"• Name: *{patient_name}*\n"
-                    f"{age_str}"
-                    f"{date_str}\n"
-                    f"📢 *Important Notice:*\n"
-                    f"Your report is ready, please collect your printed report from our lab staff / reception desk.\n\n"
-                    f"Thank you for choosing *{settings.LAB_NAME}*!"
-                )
+                text = self._build_whatsapp_message(event_type, context)
                 return whatsapp_service.send_text(
                     clean_mobile,
                     text,
@@ -410,40 +473,7 @@ class WhatsAppProvider(NotificationProvider):
 
             # 2. Patient Registration Event — SEND NAME, NUMBER, AGE, PATIENT ID, BILL AMOUNT
             elif event_type == "patient_registered":
-                mobile_no = context.get("mobile", clean_mobile)
-                age = context.get("age", "")
-                age_str = f"• Age: *{age} yrs*\n" if age else ""
-                reg_date = context.get("registered_date", "")
-                date_str = f"• Date: *{reg_date}*\n" if reg_date else ""
-
-                total_amt = context.get("total_amount")
-                paid_amt = context.get("amount_paid")
-                due_amt = context.get("due_amount")
-
-                billing_lines = ""
-                if total_amt is not None:
-                    billing_lines = f"• Total Bill Amount: *₹{float(total_amt):,.2f}*\n"
-                    if paid_amt is not None and float(paid_amt) > 0:
-                        billing_lines += f"• Amount Paid: *₹{float(paid_amt):,.2f}*\n"
-                    if due_amt is not None and float(due_amt) > 0:
-                        billing_lines += f"• Balance Due: *₹{float(due_amt):,.2f}*\n"
-
-                text = (
-                    f"*{settings.LAB_NAME}*\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"✅ *Registration Successful!*\n\n"
-                    f"Hello *{patient_name}*,\n"
-                    f"You have been successfully registered with our lab.\n\n"
-                    f"📋 *Registration Details:*\n"
-                    f"• Patient ID: *{patient_code}*\n"
-                    f"• Name: *{patient_name}*\n"
-                    f"• Mobile: *{mobile_no}*\n"
-                    f"{age_str}"
-                    f"{date_str}"
-                    f"{billing_lines}\n"
-                    f"We will notify you on WhatsApp as soon as your diagnostic report is ready.\n\n"
-                    f"Thank you for choosing *{settings.LAB_NAME}*!"
-                )
+                text = self._build_whatsapp_message(event_type, context)
                 return whatsapp_service.send_text(
                     clean_mobile,
                     text,
@@ -453,10 +483,11 @@ class WhatsAppProvider(NotificationProvider):
             # 3. Status Update Event
             elif event_type == "status_update":
                 status = context.get("status", "").replace("_", " ").upper()
-                text = (
-                    f"*{settings.LAB_NAME}*\n\n"
-                    f"Dear *{patient_name}*,\n"
-                    f"The status of your sample (Patient ID: *{patient_code}*) is now: *{status}*."
+                text = self._build_whatsapp_message(event_type, context)
+                return whatsapp_service.send_text(
+                    clean_mobile,
+                    text,
+                    idempotency_key=f"status:{patient_code}:{status}:{clean_mobile}"
                 )
                 return whatsapp_service.send_text(
                     clean_mobile,
@@ -517,3 +548,8 @@ def notify(event_type: str, recipient_email: str, context: Dict[str, Any]):
             pass
         except Exception as e:
             logger.error(f"Notification error [{event_type}]: {e}")
+
+
+# Service alias for testability & unified provider access
+NotificationService = WhatsAppProvider
+

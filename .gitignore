@@ -184,11 +184,10 @@ node_modules/
 *.sqlite
 *.sqlite3
 backend/app.db
-seed_patients.py
-backend/seed_patients.py
-tests/
-backend/tests/
-**/tests/
+# Admin bootstrap credentials (NEVER commit bootstrap tokens)
+.admin_bootstrap_token
+.admin_bootstrap_*
+
 .pytest_cache/
 
 # WhatsApp Session & Service artifacts (NEVER commit credentials/sessions)
@@ -205,3 +204,6 @@ scratch/
 # Agent configuration & IDE skills
 .agents/
 .gemini/
+
+# Maintenance & backup scripts (Render / cloud deployment)
+scripts/

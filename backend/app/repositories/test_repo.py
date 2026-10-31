@@ -22,14 +22,18 @@ def get_tests_paginated(
     page: int = 1,
     page_size: int = 30,
 ) -> Tuple[List[Test], int]:
-    """Paginated + searchable test list."""
-    query = db.query(Test)
+    from sqlalchemy.orm import selectinload
+    query = db.query(Test).options(selectinload(Test.parameters))
     if active_only:
         query = query.filter(Test.is_active == True)
     if q:
         query = query.filter(Test.name.ilike(f"%{q.strip()}%"))
-    count_q = query.limit(1000).subquery()
-    total = db.query(count_q).count()
+    count_q = db.query(Test.id)
+    if active_only:
+        count_q = count_q.filter(Test.is_active == True)
+    if q:
+        count_q = count_q.filter(Test.name.ilike(f"%{q.strip()}%"))
+    total = count_q.count()
     items = query.order_by(Test.name).offset((page - 1) * page_size).limit(page_size).all()
     return items, total
 

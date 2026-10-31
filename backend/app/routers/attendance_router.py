@@ -14,48 +14,13 @@ router = APIRouter(prefix="/attendance", tags=["attendance"])
 
 
 @router.post("/recognize")
-@limiter.limit("10/minute")
-async def recognize_and_checkin(
-    request: Request,
-    image: UploadFile = File(...),
-    device_id: Optional[str] = None,
-    db: Session = Depends(get_db),
-    idempotency_key: Optional[str] = Depends(get_idempotency_key),
-):
-    """FR-3.1 — Submit camera frame for face recognition + auto check-in/out."""
+def recognize_and_checkin():
+    """Biometric face recognition attendance is intentionally disabled in PathLab OS (SEC-02, SEC-04)."""
     from fastapi import HTTPException
-    
-    from backend.app.core.upload_security import read_upload_file_bounded, execute_secure_upload_pipeline
-    allowed_image_exts = (".jpg", ".jpeg", ".png", ".webp")
-    max_kiosk_size = 10 * 1024 * 1024  # 10MB
-
-    # Stream read with strict maximum limit to prevent memory exhaustion
-    try:
-        image_bytes = await read_upload_file_bounded(image, max_size=max_kiosk_size)
-        pipeline_res = execute_secure_upload_pipeline(
-            file_bytes=image_bytes,
-            original_filename=image.filename,
-            allowed_extensions=allowed_image_exts,
-            max_size=max_kiosk_size,
-            context="face_kiosk"
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        )
-
-    from backend.app.services import idempotency_service
-    if idempotency_key:
-        cached = idempotency_service.check_key_exists(idempotency_key, "kiosk")
-        if cached:
-            return cached
-    result = attendance_service.recognize_and_log(db, image_bytes, device_id)
-
-    if idempotency_key and result.get("matched"):
-        idempotency_service.store_result(idempotency_key, "kiosk", result)
-
-    return result
+    raise HTTPException(
+        status_code=501,
+        detail="Biometric face recognition attendance is intentionally disabled in PathLab OS."
+    )
 
 
 @router.post("/manual-checkin/{user_id}")

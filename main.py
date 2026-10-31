@@ -72,9 +72,8 @@ def check_database():
             return True
         finally:
             engine.dispose()
-    except Exception as e:
-        print(f"  [WARN] Database not reachable: {e}")
-        print("  -> Make sure PostgreSQL is running and DATABASE_URL is correct in .env")
+    except Exception:
+        print("  [WARN] Database connection failed. Please ensure PostgreSQL is running and credentials are valid.")
         return False
 
 def check_redis():
@@ -91,20 +90,37 @@ def check_redis():
         kwargs = {"socket_connect_timeout": 1.5}
         if redis_url.startswith("rediss://"):
             import ssl
-            kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+            env_prod = os.getenv("ENVIRONMENT", "development").lower() == "production"
+            verify_ssl = os.getenv("REDIS_SSL_VERIFY", "true").lower() in ("true", "1", "yes")
+            if env_prod and not verify_ssl:
+                print("\n[ERROR] REDIS_SSL_VERIFY cannot be disabled in production for rediss:// connections.")
+                sys.exit(1)
+            kwargs["ssl_cert_reqs"] = ssl.CERT_REQUIRED if verify_ssl else ssl.CERT_NONE
+            ca_certs = os.getenv("REDIS_SSL_CA_CERTS")
+            if ca_certs and os.path.exists(ca_certs):
+                kwargs["ssl_ca_certs"] = ca_certs
         r = redis_lib.from_url(redis_url, **kwargs)
         r.ping()
         print("  [OK] Redis connected")
         return True
     except Exception as e:
-        print(f"  [OK] Redis connected (In-Memory Fallback Mode: {e})")
+        err_msg = str(e)
+        # Avoid logging any passwords or URLs in fallback notice
+        clean_err = err_msg.split("@")[-1] if "@" in err_msg else err_msg
+        clean_err = clean_err.split("?")[0]
+        print(f"  [OK] Redis fallback mode activated ({clean_err[:80]})")
         return True
 
 def run_migrations():
-    """Apply pending Alembic migrations."""
+    """Apply pending Alembic migrations. Fails closed in production."""
+    env_mode = os.getenv("ENVIRONMENT", "development").lower()
+    is_prod = env_mode in ("production", "prod")
     try:
         alembic_ini = ROOT / "alembic.ini"
         if not alembic_ini.exists():
+            if is_prod:
+                print("  [FATAL] No alembic.ini found in production deployment. Refusing to start.")
+                sys.exit(1)
             print("  [SKIP] No alembic.ini found — skipping migrations")
             return
         result = subprocess.run(
@@ -116,8 +132,17 @@ def run_migrations():
         if result.returncode == 0:
             print("  [OK] Database migrations up to date")
         else:
-            print(f"  [WARN] Migration issue: {result.stderr[-200:]}")
+            clean_err = result.stderr[-300:] if result.stderr else result.stdout[-300:]
+            if is_prod:
+                print(f"  [FATAL] Critical migration failure in production: {clean_err}")
+                print("  [FATAL] Aborting application startup to prevent serving requests with incompatible schema.")
+                sys.exit(1)
+            else:
+                print(f"  [WARN] Migration issue: {clean_err}")
     except Exception as e:
+        if is_prod:
+            print(f"  [FATAL] Migration execution exception in production: {e}")
+            sys.exit(1)
         print(f"  [WARN] Could not run migrations: {e}")
 
 def start_whatsapp_microservice():
@@ -128,8 +153,9 @@ def start_whatsapp_microservice():
 
     # Skip internal node if explicitly disabled or pointing to a separate container
     wa_url = os.getenv("WHATSAPP_SERVICE_URL", "")
+    wa_port = int(os.getenv("WHATSAPP_SERVICE_PORT", "8005"))
     start_internal = os.getenv("START_INTERNAL_WHATSAPP", "").lower()
-    if start_internal == "false" or (wa_url and "whatsapp:3001" in wa_url):
+    if start_internal == "false" or (wa_url and f"whatsapp:{wa_port}" in wa_url):
         print(f"  [OK] External WhatsApp microservice configured ({wa_url or 'external'}) — skipping local Node process")
         return
 
@@ -142,8 +168,8 @@ def start_whatsapp_microservice():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.5)
-            if s.connect_ex(("127.0.0.1", 3001)) == 0:
-                print("  [OK] WhatsApp microservice is already running on port 3001")
+            if s.connect_ex(("127.0.0.1", wa_port)) == 0:
+                print(f"  [OK] WhatsApp microservice is already running on port {wa_port}")
                 return
     except Exception:
         pass
@@ -161,7 +187,7 @@ def start_whatsapp_microservice():
         )
         import atexit
         atexit.register(lambda: proc.terminate() if proc.poll() is None else None)
-        print(f"  [OK] WhatsApp microservice started in background (PID: {proc.pid}) on port 3001")
+        print(f"  [OK] WhatsApp microservice started in background (PID: {proc.pid}) on port {wa_port}")
     except Exception as e:
         print(f"  [WARN] Could not auto-start WhatsApp microservice: {e}")
 
@@ -176,14 +202,20 @@ def main():
     redis_ok = check_redis()
     start_whatsapp_microservice()
 
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    is_prod = env == "production"
+
     if db_ok:
         run_migrations()
 
-        try:
-            from backend.seed.seed import seed
-            seed()
-        except Exception as e:
-            print(f"  [WARN] Auto-seeding database failed: {e}")
+        if is_prod:
+            print("  [OK] Production startup: automatic development seed execution is skipped.")
+        else:
+            try:
+                from backend.seed.seed import seed
+                seed()
+            except Exception as e:
+                print(f"  [WARN] Auto-seeding database failed: {e}")
 
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))

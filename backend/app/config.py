@@ -4,7 +4,7 @@ Loads all configuration from environment variables / .env file.
 """
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, model_validator
-from typing import List, Set, ClassVar
+from typing import List, Set, ClassVar, Optional
 import os
 
 
@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     REDIS_DEFAULT_TTL: int = 300
     REDIS_NEGATIVE_TTL: int = 60
     REDIS_FINANCE_TTL: int = 60
+    REDIS_SSL_VERIFY: bool = True
+    REDIS_SSL_CA_CERTS: Optional[str] = None
 
     @field_validator("REDIS_URL", mode="after")
     @classmethod
@@ -41,8 +43,9 @@ class Settings(BaseSettings):
                 pass
         return v
 
-    # JWT
+    # Cryptographic Peppers & Keys
     PASSWORD_PEPPER: str = ""
+    AADHAAR_PEPPER: str = ""
     JWT_SECRET_KEY: str = "change-this-secret"
     JWT_ACCESS_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_EXPIRE_DAYS: int = 7
@@ -56,6 +59,7 @@ class Settings(BaseSettings):
         "your-secret-key",
         "your-secret",
         "generate_your_64_char_secure_random_string_here",
+        "generate_your_32_char_secure_random_string_here",
         "password",
         "admin",
         "12345678",
@@ -103,6 +107,36 @@ class Settings(BaseSettings):
                     "Generate a cryptographically secure random key using a CSPRNG."
                 )
 
+            # Validate PASSWORD_PEPPER in production
+            pw_pepper = (self.PASSWORD_PEPPER or "").strip()
+            if not pw_pepper:
+                raise ValueError(
+                    "PASSWORD_PEPPER must be configured in production. "
+                    "Production requires a dedicated 32+ character cryptographically secure pepper."
+                )
+            if pw_pepper.lower() in self.INSECURE_JWT_PLACEHOLDERS or len(pw_pepper) < 32 or len(set(pw_pepper)) < 8:
+                raise ValueError(
+                    f"PASSWORD_PEPPER is using an insecure placeholder, too short ({len(pw_pepper)} chars), or lacks entropy in production. "
+                    "Production requires at least 32 high-entropy random characters."
+                )
+
+            # Validate AADHAAR_PEPPER in production
+            aadhaar_pep = (self.AADHAAR_PEPPER or "").strip()
+            if not aadhaar_pep:
+                raise ValueError(
+                    "AADHAAR_PEPPER must be configured in production. "
+                    "Keyed HMAC protection for sensitive Aadhaar IDs requires a dedicated 32+ character pepper."
+                )
+            if aadhaar_pep.lower() in self.INSECURE_JWT_PLACEHOLDERS or len(aadhaar_pep) < 32 or len(set(aadhaar_pep)) < 8:
+                raise ValueError(
+                    f"AADHAAR_PEPPER is using an insecure placeholder, too short ({len(aadhaar_pep)} chars), or lacks entropy in production."
+                )
+            if aadhaar_pep == pw_pepper:
+                raise ValueError(
+                    "AADHAAR_PEPPER must not be identical to PASSWORD_PEPPER. "
+                    "Cryptographic domain separation requires distinct peppers."
+                )
+
             # Validate reCAPTCHA keys in production
             if self.ENABLE_RECAPTCHA:
                 if self.RECAPTCHA_SECRET_KEY in {
@@ -111,13 +145,25 @@ class Settings(BaseSettings):
                 }:
                     raise ValueError("Cannot use Google reCAPTCHA public test secret key in production.")
 
-            # Validate WhatsApp token in production (warn instead of crashing boot)
+            # Validate WhatsApp service token in production
             if self.WHATSAPP_ENABLED:
-                if self.WHATSAPP_SERVICE_TOKEN == "pathlab_wa_sec_token_9f83a21b47c0e6":
-                    import logging
-                    logging.getLogger("akriti.security").warning(
-                        "WHATSAPP_SERVICE_TOKEN is using the default repository placeholder. "
-                        "Consider configuring a unique secret token in production environment."
+                wa_token = (self.WHATSAPP_SERVICE_TOKEN or "").strip()
+                if not wa_token or wa_token == "pathlab_wa_sec_token_9f83a21b47c0e6" or wa_token.lower() in self.INSECURE_JWT_PLACEHOLDERS:
+                    raise ValueError(
+                        "WHATSAPP_SERVICE_TOKEN is missing or using an insecure default placeholder in production. "
+                        "Configure a unique, high-entropy secret token for WhatsApp service authentication."
+                    )
+                if len(wa_token) < 16:
+                    raise ValueError(
+                        f"WHATSAPP_SERVICE_TOKEN is too short ({len(wa_token)} chars) for production. Minimum 16 characters required."
+                    )
+
+            # Validate Redis TLS verification in production
+            if self.REDIS_URL.startswith("rediss://"):
+                if not self.REDIS_SSL_VERIFY:
+                    raise ValueError(
+                        "REDIS_SSL_VERIFY cannot be False in production for rediss:// connections. "
+                        "TLS certificate verification is required to prevent man-in-the-middle attacks."
                     )
 
         return self
@@ -253,8 +299,8 @@ class Settings(BaseSettings):
 
     # WhatsApp Integration Service
     WHATSAPP_ENABLED: bool = True
-    WHATSAPP_SERVICE_URL: str = "http://127.0.0.1:3001"
-    WHATSAPP_SERVICE_PORT: int = 3001
+    WHATSAPP_SERVICE_URL: str = "http://127.0.0.1:8005"
+    WHATSAPP_SERVICE_PORT: int = 8005
     WHATSAPP_SERVICE_TOKEN: str = "pathlab_wa_sec_token_9f83a21b47c0e6"
     WHATSAPP_SESSION_PATH: str = "WHATSAPP/session"
     WHATSAPP_OTP_EXPIRY_SECONDS: int = 300

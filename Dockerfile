@@ -58,8 +58,16 @@ WORKDIR /app
 # Copy the rest of the application code
 COPY . /app/
 
-# Ensure session directory exists
-RUN mkdir -p /app/WHATSAPP/session
+# Create dedicated non-root application user and group (SEC-09)
+RUN groupadd -r appgroup && useradd -r -g appgroup -d /app -s /sbin/nologin appuser
+
+# Ensure necessary writable runtime directories exist with restricted permissions
+RUN mkdir -p /app/WHATSAPP/session /app/uploads /app/temp && \
+    chown -R appuser:appgroup /app/WHATSAPP/session /app/uploads /app/temp && \
+    chmod -R 770 /app/WHATSAPP/session /app/uploads /app/temp
+
+# Switch to unprivileged runtime user
+USER appuser
 
 # Expose the API port
 EXPOSE 8000

@@ -159,8 +159,10 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
 
     from backend.app.services import notification_service
     tot_amt = float(total_amount)
+    disc_amt = float(discount_amount)
+    net_payable = max(0.0, tot_amt - disc_amt)
     paid_amt = float(getattr(patient, "amount_paid", None) or getattr(payload, "amount_paid", None) or 0)
-    due_amt = max(0.0, tot_amt - paid_amt)
+    due_amt = float(patient.amount_due) if hasattr(patient, "amount_due") else max(0.0, net_payable - paid_amt)
     reg_date_str = patient.sample_date.strftime("%d %b %Y") if patient.sample_date else date.today().strftime("%d %b %Y")
 
     if background_tasks:
@@ -175,6 +177,10 @@ def create_patient(db: Session, payload: PatientCreate, current_user_id: uuid.UU
                 "age": patient.age,
                 "gender": patient.gender.value if hasattr(patient.gender, 'value') else str(patient.gender),
                 "total_amount": tot_amt,
+                "discount_amount": disc_amt,
+                "final_amount": net_payable,
+                "net_amount": net_payable,
+                "amount_paid": paid_amt,
                 "paid_amount": paid_amt,
                 "due_amount": due_amt,
                 "registered_date": reg_date_str,
@@ -211,6 +217,47 @@ def update_patient(db: Session, patient_id: uuid.UUID, payload: PatientUpdate,
     # Remove force_duplicate from update_data so it doesn't try to save it to DB
     if "force_duplicate" in update_data:
         update_data.pop("force_duplicate")
+
+    from backend.app.models.user import User, RoleEnum
+    from fastapi import HTTPException
+
+    # Strip immutable system fields to prevent mass-assignment
+    for immutable_key in ("id", "patient_code", "collected_by", "created_at", "referred_doctor_commission_pct", "referred_doctor_commission_amount"):
+        update_data.pop(immutable_key, None)
+
+    # Resolve user role for financial and workflow authorization checks
+    caller = db.query(User).filter(User.id == current_user_id).first()
+    is_admin = bool(caller and getattr(caller.role, "value", caller.role) in (RoleEnum.admin, "admin"))
+
+    # Financial operations privilege separation:
+    # Non-administrators cannot modify discount_amount or amount_paid on existing records
+    if "discount_amount" in update_data:
+        old_discount = float(patient.discount_amount or 0)
+        new_discount = float(update_data["discount_amount"])
+        if abs(old_discount - new_discount) > 0.001 and not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Modifying discount on existing patient records requires administrator authorization."
+            )
+
+    if "amount_paid" in update_data:
+        old_paid = float(patient.amount_paid or 0)
+        new_paid = float(update_data["amount_paid"])
+        if abs(old_paid - new_paid) > 0.001 and not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Directly altering amount_paid on existing patient records requires administrator authorization."
+            )
+
+    # Workflow state protection:
+    # Diagnostic release status ('report_ready', 'partial_release') must go through the report release pipeline
+    if "status" in update_data:
+        requested_status = update_data["status"]
+        if requested_status in ("report_ready", "partial_release"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Status transition to '{requested_status}' must be executed through the diagnostic report release workflow."
+            )
 
     # If tests changed, recompute total
     from decimal import Decimal

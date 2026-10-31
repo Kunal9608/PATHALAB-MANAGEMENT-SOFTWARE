@@ -70,100 +70,18 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def enroll_sample(db: Session, user_id: uuid.UUID, image_bytes: bytes) -> dict:
-    """FR-2.2 — Capture one face sample. Activates account when min samples reached."""
-    if not FACE_RECOGNITION_AVAILABLE or fr_lib is None:
-        from fastapi import HTTPException
-        raise HTTPException(
-            status_code=503,
-            detail="Biometric face recognition service is unavailable on this system."
-        )
-
-    embedding = _compute_embedding(image_bytes)
-
-    if embedding is None:
-        return {
-            "accepted": False,
-            "reason": "Expected exactly one clearly visible face. Please try again.",
-            "sample_count": attendance_repo.count_embeddings_for_user(db, user_id),
-            "face_registered": False,
-            "is_active": False,
-        }
-
-    # Store embedding
-    sample_count_before = attendance_repo.count_embeddings_for_user(db, user_id)
-    sample_index = sample_count_before + 1
-    attendance_repo.add_embedding(db, user_id, _embedding_to_storage(embedding), sample_index)
-
-    sample_count = sample_count_before + 1
-    face_registered = False
-    is_active = False
-
-    # FR-2.2: activate when minimum samples reached
-    if sample_count >= settings.FACE_MIN_SAMPLES:
-        user_repo.update_user(db, user_id, face_registered=True, is_active=True)
-        face_registered = True
-        is_active = True
-
-    db.commit()
-
-    return {
-        "accepted": True,
-        "sample_count": sample_count,
-        "face_registered": face_registered,
-        "is_active": is_active,
-        "message": (
-            f"Sample {sample_count} captured. "
-            + ("Account is now active!" if is_active else f"{settings.FACE_MIN_SAMPLES - sample_count} more needed.")
-        ),
-    }
+    """Biometric face enrollment is intentionally disabled in PathLab OS (SEC-02, SEC-04)."""
+    from fastapi import HTTPException
+    raise HTTPException(
+        status_code=501,
+        detail="Biometric face enrollment is intentionally disabled in PathLab OS."
+    )
 
 
 def recognize(db: Session, image_bytes: bytes) -> dict:
-    """FR-3.1 — Recognize face against all enrolled embeddings."""
-    if not FACE_RECOGNITION_AVAILABLE or fr_lib is None:
-        return {
-            "matched": False,
-            "reason": "Biometric face recognition service is unavailable on this system",
-            "service_available": False,
-        }
-
-    probe_embedding = _compute_embedding(image_bytes)
-
-    if probe_embedding is None:
-        return {
-            "matched": False,
-            "reason": "No single clear face detected in frame",
-        }
-
-    # Load all stored embeddings
-    all_embeddings = attendance_repo.get_all_embeddings(db)
-    if not all_embeddings:
-        return {"matched": False, "reason": "No enrolled faces in system"}
-
-    # Find best match (cosine similarity)
-    best_user_id = None
-    best_score = -1.0
-
-    for fe in all_embeddings:
-        stored_vec = _storage_to_embedding(fe.embedding)
-        score = _cosine_similarity(probe_embedding, stored_vec)
-        if score > best_score:
-            best_score = score
-            best_user_id = fe.user_id
-
-    threshold = settings.FACE_MATCH_THRESHOLD
-
-    if best_score < threshold or not best_user_id:
-        return {
-            "matched": False,
-            "reason": f"Face not recognized clearly (confidence: {best_score:.2f})",
-            "confidence": best_score,
-        }
-
-    user = user_repo.get_by_id(db, best_user_id)
+    """Biometric face recognition is intentionally disabled in PathLab OS (SEC-02, SEC-04)."""
     return {
-        "matched": True,
-        "user_id": str(best_user_id),
-        "user_name": user.name if user else "Unknown",
-        "confidence": best_score,
+        "matched": False,
+        "reason": "Biometric face recognition is intentionally disabled in PathLab OS",
+        "service_available": False,
     }

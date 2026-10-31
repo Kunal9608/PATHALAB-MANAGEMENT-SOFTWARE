@@ -19,6 +19,7 @@ from backend.app.models.test_parameter import TestParameter
 from backend.app.models.patient_test_result import PatientTestResult
 from backend.app.models.cached_patient_registration import CachedPatientRegistration
 from backend.app.models.admin_vault_item import AdminVaultItem
+from backend.app.models.copilot_message import CopilotMessage
 
 __all__ = [
     "User", "RoleEnum", "ViewScopeEnum",
@@ -41,5 +42,6 @@ __all__ = [
     "PatientTestResult",
     "CachedPatientRegistration",
     "AdminVaultItem",
+    "CopilotMessage",
 ]
 

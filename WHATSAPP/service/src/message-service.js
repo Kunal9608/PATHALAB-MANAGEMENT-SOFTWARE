@@ -18,7 +18,9 @@ function cleanIdempotencyCache() {
     }
   }
 }
-setInterval(cleanIdempotencyCache, 60 * 1000);
+
+const cacheInterval = setInterval(cleanIdempotencyCache, 60 * 1000);
+if (cacheInterval.unref) cacheInterval.unref();
 
 function formatRecipientJid(recipient) {
   if (!recipient) return null;

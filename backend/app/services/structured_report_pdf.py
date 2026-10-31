@@ -266,32 +266,56 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
     for test_group in booked_tests_data:
         story.append(safe_p(f"** REPORT OF {test_group['test_name'].upper()} **", test_heading_style))
 
-        table_rows = [
-            [
-                Paragraph("INVESTIGATION", th_style),
-                Paragraph("RESULT", th_style),
-                Paragraph("UNIT", th_style),
-                Paragraph("REFERENCE RANGE", th_style)
+        # Check if this test is descriptive / narrative (e.g. imaging, USG, X-ray where unit & reference are empty)
+        has_params = bool(test_group["parameters"])
+        is_descriptive = has_params and all(
+            not (p.get("unit") or "").strip() and not (p.get("reference") or "").strip()
+            for p in test_group["parameters"]
+        )
+
+        if is_descriptive:
+            desc_widths = [160, 363]  # Total 523pt
+            table_rows = [
+                [
+                    Paragraph("INVESTIGATION / PARAMETER", th_style),
+                    Paragraph("OBSERVATIONS / FINDINGS", th_style),
+                ]
             ]
-        ]
+            for p in test_group["parameters"]:
+                val_str = p["value"]
+                val_style_chosen = td_bold_style if p.get("is_abnormal") else td_style
+                table_rows.append([
+                    safe_p(p["name"], td_style),
+                    safe_p(val_str, val_style_chosen),
+                ])
+            t = Table(table_rows, colWidths=desc_widths, repeatRows=1)
+        else:
+            table_rows = [
+                [
+                    Paragraph("INVESTIGATION", th_style),
+                    Paragraph("RESULT", th_style),
+                    Paragraph("UNIT", th_style),
+                    Paragraph("REFERENCE RANGE", th_style)
+                ]
+            ]
 
-        for p in test_group["parameters"]:
-            val_str = p["value"]
-            unit_str = p.get("unit") or ""
-            ref_str = p.get("reference") or ""
+            for p in test_group["parameters"]:
+                val_str = p["value"]
+                unit_str = p.get("unit") or ""
+                ref_str = p.get("reference") or ""
 
-            val_style_chosen = td_bold_style if p.get("is_abnormal") else td_style
-            val_para = safe_p(val_str, val_style_chosen)
+                val_style_chosen = td_bold_style if p.get("is_abnormal") else td_style
+                val_para = safe_p(val_str, val_style_chosen)
 
-            table_rows.append([
-                safe_p(p["name"], td_style),
-                val_para,
-                safe_p(unit_str, td_style),
-                safe_p(ref_str, td_style)
-            ])
+                table_rows.append([
+                    safe_p(p["name"], td_style),
+                    val_para,
+                    safe_p(unit_str, td_style),
+                    safe_p(ref_str, td_style)
+                ])
 
+            t = Table(table_rows, colWidths=col_widths, repeatRows=1)
 
-        t = Table(table_rows, colWidths=col_widths, repeatRows=1)
         t_style = [
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -305,6 +329,23 @@ def generate_structured_report_pdf(patient, booked_tests_data, verification_hash
         # pyrefly: ignore [bad-argument-type]
         t.setStyle(TableStyle(t_style))
         story.append(t)
+
+        # Render doctor / staff clinical note if provided
+        note = (test_group.get("interpretation_note") or "").strip()
+        if note:
+            story.append(Spacer(1, 4))
+            note_table = Table([[
+                Paragraph(f"<b>Remarks / Clinical Note:</b> {html.escape(note)}", td_style)
+            ]], colWidths=[523])
+            note_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8F9FA')),
+                ('BOX', (0, 0), (-1, -1), 0.5, border_color),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            story.append(note_table)
 
     # 3. End of Report Marker
     story.append(Spacer(1, 15))

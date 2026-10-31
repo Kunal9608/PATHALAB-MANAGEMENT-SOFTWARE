@@ -1509,7 +1509,8 @@
           <div style="text-align:center;padding:30px 15px;background:var(--color-bg);border-radius:var(--radius-lg);border:1px solid var(--color-border)">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-faint)" stroke-width="1.5" style="margin:0 auto 10px;display:block"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <div style="font-size:14px;font-weight:600;color:var(--color-ink);margin-bottom:4px">No Parameters Configured</div>
-            <div style="font-size:12px;color:var(--color-ink-muted)">The tests assigned to this patient do not have structured parameters configured yet. You can upload a manual PDF report or configure reference ranges in Admin Tests.</div>
+            <div style="font-size:12px;color:var(--color-ink-muted);margin-bottom:12px">The tests assigned to this patient do not have structured parameters configured yet. You can upload a manual PDF report or configure reference ranges in Admin Tests.</div>
+            <a href="/admin/tests" target="_blank" class="btn btn-sm btn-secondary" style="display:inline-flex;align-items:center;gap:6px">⚙️ Configure Parameters in Test Catalog</a>
           </div>
         `;
         return;
@@ -1549,8 +1550,8 @@
                   <tr>
                     <th style="text-align:left;width:25%">Parameter</th>
                     <th style="text-align:left;width:20%">Range</th>
-                    <th style="text-align:left;width:20%">Result</th>
-                    <th style="text-align:left;width:25%">Visualizer</th>
+                    <th style="text-align:left;width:22%">Result</th>
+                    <th style="text-align:left;width:23%">Visualizer</th>
                     <th style="text-align:center;width:10%">Flag</th>
                   </tr>
                 </thead>
@@ -1560,13 +1561,20 @@
                     const val = ex.entered_value !== undefined ? ex.entered_value : (p.input_type === 'text' && p.reference_text ? p.reference_text : '');
                     const isAbn = ex.is_abnormal || false;
 
+                    let dropdownOpts = Array.isArray(p.dropdown_options) && p.dropdown_options.length > 0 ? p.dropdown_options : [];
+                    if (!dropdownOpts.length && (p.input_type === 'dropdown' || p.input_type === 'select') && p.reference_text) {
+                      dropdownOpts = p.reference_text.split(',').map(s => s.trim()).filter(Boolean);
+                    }
+
                     let inputHtml = '';
                     if (p.input_type === 'numeric') {
                       inputHtml = `<input type="number" step="any" class="form-input param-input ${isAbn ? 'border-danger' : ''}" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="numeric" data-low="${p.reference_low ?? ''}" data-high="${p.reference_high ?? ''}" value="${escapeHtml(val)}" placeholder="e.g. ${p.reference_low !== null && p.reference_high !== null ? ((p.reference_low + p.reference_high)/2).toFixed(1) : 'Value'}">`;
-                    } else if (p.input_type === 'dropdown' && Array.isArray(p.dropdown_options) && p.dropdown_options.length > 0) {
+                    } else if (p.input_type === 'multiline') {
+                      inputHtml = `<textarea class="form-input param-input" rows="3" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="multiline" placeholder="Enter findings / observations..." style="min-height:60px;resize:vertical;font-size:12px;line-height:1.4">${escapeHtml(val)}</textarea>`;
+                    } else if (dropdownOpts.length > 0) {
                       inputHtml = `<select class="form-input param-input" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="dropdown">
                         <option value="">-- Select --</option>
-                        ${p.dropdown_options.map(o => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+                        ${dropdownOpts.map(o => `<option value="${escapeHtml(o)}" ${val === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
                       </select>`;
                     } else {
                       inputHtml = `<input type="text" class="form-input param-input" data-param-id="${p.id}" data-test-id="${group.test_id}" data-type="text" value="${escapeHtml(val)}" placeholder="Enter finding...">`;

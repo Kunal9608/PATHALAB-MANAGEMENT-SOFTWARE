@@ -189,6 +189,85 @@ def is_patient_followup_query(message: str) -> bool:
     return False
 
 
+def check_pathlab_domain_scope(message: str) -> Tuple[bool, Optional[str]]:
+    """
+    Server-side deterministic domain boundary & prompt-injection policy check.
+    Enforces that Akriti Copilot strictly operates within pathology laboratory management
+    and clinical diagnostic medicine.
+    Returns:
+        (is_in_scope: bool, rejection_message: Optional[str])
+    """
+    msg_lower = message.lower().strip()
+
+    # 1. Prompt Injection & System Override Defense
+    injection_patterns = [
+        "ignore previous instructions", "disregard all previous", "you are now a",
+        "jailbreak", "override system", "new role:", "reveal prompt", "developer mode",
+        "dan mode", "act as an unfiltered", "system prompt", "forget your rules",
+        "bypass restrictions", "ignore your system", "unrestricted mode"
+    ]
+    if any(p in msg_lower for p in injection_patterns):
+        return (
+            False,
+            "Security Policy: Prompt override and system modification attempts are rejected. "
+            "I operate strictly within the Akriti Diagnostics laboratory management and clinical pathology domain."
+        )
+
+    # 2. Whitelist: Medical, Clinical Diagnostics, Pathology, and Lab Operations
+    clinical_lab_keywords = [
+        "patient", "mareez", "doctor", "dr.", "dr ", "test", "tests", "sample",
+        "report", "reports", "billing", "bill", "due", "dues", "payment", "revenue",
+        "staff", "lab", "pathlab", "diagnosis", "diagnostic", "blood", "urine",
+        "stool", "semen", "serum", "plasma", "cbc", "hemoglobin", "hb", "wbc", "rbc",
+        "platelet", "platelets", "lft", "kft", "rft", "creatinine", "urea", "bilirubin",
+        "sgot", "sgpt", "lipid", "cholesterol", "triglyceride", "triglycerides", "hdl",
+        "ldl", "vldl", "sugar", "glucose", "fbs", "ppbs", "rbs", "hba1c", "thyroid",
+        "t3", "t4", "tsh", "widal", "typhoid", "dengue", "ns1", "malaria", "vitamin",
+        "b12", "vit d", "electrolyte", "electrolytes", "sodium", "potassium", "calcium",
+        "troponin", "ecg", "biopsy", "histology", "pathology", "specimen", "edta",
+        "fluoride", "tube", "vial", "normal range", "reference range", "fasting",
+        "collection", "phlebotomy", "culture", "sensitivity", "antibody", "antigen",
+        "smear", "hiv", "hbsag", "hcv", "vdrl", "crp", "esr", "akriti", "discount",
+        "receipt", "appointment", "abnormal", "organ", "liver", "kidney", "heart",
+        "infection", "fever", "pain", "medical", "disease", "health", "symptom",
+        "finding", "findings", "parameter", "unit", "mg/dl", "g/dl", "range"
+    ]
+
+    has_clinical_context = any(kw in msg_lower for kw in clinical_lab_keywords)
+    if has_clinical_context:
+        return True, None
+
+    # 3. Conversational Greetings & Identity
+    greetings = [
+        "hello", "hi", "hey", "namaste", "pranam", "good morning", "good afternoon",
+        "good evening", "who are you", "help", "help me", "what can you do", "kya kar sakte ho",
+        "kaise ho", "how are you", "thanks", "thank you", "shukriya", "dhanyawad"
+    ]
+    if any(g in msg_lower for g in greetings):
+        return True, None
+
+    # 4. Blacklist: Definitely out of domain
+    out_of_domain_patterns = [
+        "write code", "python", "javascript", "c++", "java code", "html", "css",
+        "sql query", "react", "programming", "algorithm", "leetcode", "fix my bug",
+        "cricket", "ipl", "football", "fifa", "movie", "cinema", "actor", "actress",
+        "song", "lyrics", "celebrity", "video game", "gaming", "prime minister",
+        "president", "capital of", "world war", "election", "parliament", "geopolitics",
+        "write a poem", "write a story", "essay on", "cryptocurrency", "bitcoin",
+        "stock market", "crypto", "trading strategy", "weather in", "joke"
+    ]
+    if any(p in msg_lower for p in out_of_domain_patterns):
+        return (
+            False,
+            "I specialize strictly in Akriti Diagnostics laboratory management and clinical pathology. "
+            "I cannot assist with topics outside lab operations and medical diagnostics. "
+            "How may I help you with our lab tests or patient records?"
+        )
+
+    # By default, allow borderline or query to proceed to normal retrieval/assistant
+    return True, None
+
+
 async def build_copilot_context_async(
     message: str,
     current_user: User,
@@ -205,6 +284,11 @@ async def build_copilot_context_async(
     msg_trimmed = message.strip()
     msg_lower = msg_trimmed.lower()
     system_prompt = _get_base_system_prompt(current_user)
+
+    # Deterministic Server-side Scope Check
+    is_in_scope, rejection = check_pathlab_domain_scope(msg_trimmed)
+    if not is_in_scope and rejection:
+        return system_prompt, rejection, None
 
     # 0. STAFF IDENTIFIER LOOKUP (e.g. STAFF26003, STAFF26001, etc.)
     staff_matches = STAFF_ID_SCAN_REGEX.findall(message)

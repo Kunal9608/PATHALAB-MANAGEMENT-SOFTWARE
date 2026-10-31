@@ -24,6 +24,118 @@
     .toggle::after { content:''; position:absolute; left:3px; top:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition: transform var(--transition-base); }
     .toggle.on::after { transform: translateX(18px); }
     @media(max-width:900px){ .settings-grid { grid-template-columns: 1fr; } }
+
+    /* WhatsApp Integration Theme-Adaptive Card Styles */
+    .wa-account-card {
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+      margin-bottom: 18px;
+      position: relative;
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      transition: all var(--transition-fast);
+    }
+    [data-theme="dark"] .wa-account-card {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.32);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+    [data-theme="light"] .wa-account-card {
+      background: rgba(5, 150, 105, 0.05);
+      border: 1px solid rgba(5, 150, 105, 0.22);
+    }
+    .wa-account-card-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .wa-account-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.16);
+      color: #10B981;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    [data-theme="light"] .wa-account-icon {
+      background: rgba(5, 150, 105, 0.12);
+      color: #059669;
+      border-color: rgba(5, 150, 105, 0.25);
+    }
+    .wa-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--color-success, #10B981);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .wa-live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      animation: waDotPulse 2s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes waDotPulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .wa-alert-offline {
+      display: none;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.32);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      color: var(--color-warning, #F59E0B);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .wa-alert-offline code {
+      background: rgba(0, 0, 0, 0.25);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--color-ink, #F1F5F9);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    [data-theme="light"] .wa-alert-offline code {
+      background: rgba(0, 0, 0, 0.06);
+      color: #B45309;
+    }
+    .wa-qr-box-style {
+      display: none;
+      margin-top: 20px;
+      border: 1px dashed rgba(96, 165, 250, 0.4);
+      background: var(--surface-input);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      text-align: center;
+    }
+    .wa-qr-img-wrap {
+      display: inline-block;
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+      margin-bottom: 14px;
+    }
   </style>
 </head>
 <body>
@@ -150,7 +262,7 @@
                 <div class="fw-600 text-sm">WhatsApp (Multi-Device)</div>
                 <div class="text-xs text-muted" id="wa-provider-subtitle">Patient OTPs & automated PDF reports</div>
               </div>
-              <span id="wa-provider-badge" class="badge" style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px;background:var(--color-bg-subtle);color:var(--color-ink-muted)">Checking...</span>
+              <span id="wa-provider-badge" class="badge" style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px;background:rgba(148, 163, 184, 0.12);color:var(--color-ink-muted);border:1px solid var(--color-border)">Checking...</span>
             </div>
             <div class="provider-row">
               <div>
@@ -166,28 +278,35 @@
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
               <div>
                 <div class="settings-section-title" style="margin:0">WhatsApp Integration</div>
-                <div class="text-xs text-muted" style="margin-top:4px">Scan QR code once to connect lab WhatsApp for automated OTPs & PDF reports</div>
+                <div class="text-xs text-muted" style="margin-top:4px">Scan QR code once to connect lab WhatsApp for automated OTPs &amp; PDF reports</div>
               </div>
-              <span id="wa-card-badge" class="badge" style="background:var(--color-bg-subtle);color:var(--color-ink-muted);font-weight:600;padding:4px 10px;border-radius:var(--radius-pill);font-size:12px">Checking...</span>
+              <span id="wa-card-badge" class="badge" style="background:rgba(148, 163, 184, 0.12);color:var(--color-ink-muted);border:1px solid var(--color-border);font-weight:600;padding:4px 10px;border-radius:var(--radius-pill);font-size:12px">Checking...</span>
             </div>
 
             <!-- Connected Account Banner -->
-            <div id="wa-connected-banner" style="display:none;background:#F0FAF7;border:1px solid #C4DFD8;border-radius:var(--radius-md);padding:14px;margin-bottom:16px">
-              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-                <div style="display:flex;align-items:center;gap:12px">
-                  <div style="width:38px;height:38px;border-radius:50%;background:#0E5C4E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:18px">📱</div>
+            <div id="wa-connected-banner" class="wa-account-card" style="display:none">
+              <div class="wa-account-card-inner">
+                <div style="display:flex;align-items:center;gap:14px">
+                  <div class="wa-account-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.63C8.75 21.42 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.53 7.32C9.35 7.32 9.06 7.39 8.81 7.66C8.56 7.93 7.85 8.59 7.85 9.94C7.85 11.29 8.83 12.59 8.97 12.78C9.11 12.97 10.9 15.72 13.64 16.9C15.92 17.88 16.38 17.68 16.88 17.64C17.38 17.59 18.49 16.98 18.72 16.33C18.95 15.68 18.95 15.12 18.88 15C18.81 14.88 18.63 14.81 18.35 14.68C18.07 14.54 16.7 13.86 16.45 13.77C16.2 13.68 16.01 13.63 15.83 13.91C15.65 14.18 15.12 14.81 14.96 15C14.8 15.18 14.64 15.2 14.36 15.07C14.08 14.93 13.19 14.64 12.13 13.7C11.3 12.96 10.75 12.05 10.61 11.82C10.47 11.59 10.6 11.47 10.74 11.33C10.86 11.21 11.01 11.01 11.15 10.85C11.29 10.69 11.34 10.57 11.43 10.39C11.52 10.21 11.48 10.05 11.41 9.91C11.34 9.77 10.79 8.41 10.56 7.86C10.33 7.33 10.11 7.4 9.95 7.39L9.53 7.32Z"/>
+                    </svg>
+                  </div>
                   <div>
-                    <div class="fw-600 text-sm" style="color:#0E5C4E" id="wa-connected-name">Akriti Diagnostics WhatsApp</div>
-                    <div class="text-xs text-muted" id="wa-connected-phone">+91 XXXXXXXXXX</div>
+                    <div class="fw-600 text-sm" style="color:var(--color-ink);letter-spacing:-0.01em;margin-bottom:3px;font-size:14px" id="wa-connected-name">Akriti Diagnostics WhatsApp</div>
+                    <div class="text-xs" style="color:var(--color-ink-muted);font-family:var(--font-mono);font-weight:500;letter-spacing:0.02em" id="wa-connected-phone">+91 XXXXXXXXXX</div>
                   </div>
                 </div>
-                <div class="text-xs text-muted" id="wa-connected-time">Connected</div>
+                <div class="wa-status-pill">
+                  <span class="wa-live-dot"></span>
+                  <span id="wa-connected-time">Connected</span>
+                </div>
               </div>
             </div>
 
             <!-- Offline Service Warning -->
-            <div id="wa-offline-alert" style="display:none;background:#FFF3E0;border:1px solid #FFE0B2;border-radius:var(--radius-md);padding:12px;margin-bottom:16px;color:#E65100;font-size:13px">
-              ⚠️ WhatsApp background microservice is offline on port 3001. Please run <code>node WHATSAPP/service/src/server.js</code> in terminal (without dot).
+            <div id="wa-offline-alert" class="wa-alert-offline">
+              ⚠️ WhatsApp background microservice is offline on port 8005. Please run <code>node WHATSAPP/service/src/server.js</code> in terminal (without dot).
             </div>
 
             <!-- Action Buttons -->
@@ -198,10 +317,10 @@
             </div>
 
             <!-- QR Code Scan Area -->
-            <div id="wa-qr-box" style="display:none;margin-top:20px;border:1px dashed var(--color-primary);background:#FAFAF8;border-radius:var(--radius-md);padding:24px;text-align:center">
+            <div id="wa-qr-box" class="wa-qr-box-style">
               <div class="fw-600 text-sm" style="color:var(--color-primary);margin-bottom:4px">Scan QR Code with WhatsApp</div>
               <div class="text-xs text-muted" style="margin-bottom:16px">Open WhatsApp on your phone &rarr; Settings / Linked Devices &rarr; Link a Device</div>
-              <div style="display:inline-block;background:#fff;padding:12px;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,0.06);margin-bottom:14px">
+              <div class="wa-qr-img-wrap">
                 <img id="wa-qr-image" src="" alt="WhatsApp QR Code" style="width:240px;height:240px;display:block">
               </div>
               <div class="text-xs text-muted" id="wa-qr-status">
@@ -489,37 +608,28 @@
     const cardBadge = document.getElementById('wa-card-badge');
     if (!provBadge || !cardBadge) return;
 
+    const setBadge = (el, text, bg, color, border) => {
+      el.textContent = text;
+      el.style.background = bg;
+      el.style.color = color;
+      el.style.border = border;
+    };
+
     if (!isOnline) {
-      provBadge.textContent = 'Offline';
-      provBadge.style.background = '#FDE8E8';
-      provBadge.style.color = '#9B1C1C';
-      cardBadge.textContent = 'Service Offline';
-      cardBadge.style.background = '#FDE8E8';
-      cardBadge.style.color = '#9B1C1C';
+      setBadge(provBadge, 'Offline', 'rgba(239, 68, 68, 0.15)', 'var(--color-error, #EF4444)', '1px solid rgba(239, 68, 68, 0.35)');
+      setBadge(cardBadge, 'Service Offline', 'rgba(239, 68, 68, 0.15)', 'var(--color-error, #EF4444)', '1px solid rgba(239, 68, 68, 0.35)');
       return;
     }
 
     if (status === 'connected') {
-      provBadge.textContent = 'Connected';
-      provBadge.style.background = '#DEF7EC';
-      provBadge.style.color = '#03543F';
-      cardBadge.textContent = 'Connected';
-      cardBadge.style.background = '#DEF7EC';
-      cardBadge.style.color = '#03543F';
+      setBadge(provBadge, 'Connected', 'rgba(16, 185, 129, 0.15)', 'var(--color-success, #10B981)', '1px solid rgba(16, 185, 129, 0.35)');
+      setBadge(cardBadge, 'Connected', 'rgba(16, 185, 129, 0.15)', 'var(--color-success, #10B981)', '1px solid rgba(16, 185, 129, 0.35)');
     } else if (status === 'connecting') {
-      provBadge.textContent = 'Scan QR';
-      provBadge.style.background = '#FEF08A';
-      provBadge.style.color = '#713F12';
-      cardBadge.textContent = 'Scan QR';
-      cardBadge.style.background = '#FEF08A';
-      cardBadge.style.color = '#713F12';
+      setBadge(provBadge, 'Scan QR', 'rgba(245, 158, 11, 0.15)', 'var(--color-warning, #F59E0B)', '1px solid rgba(245, 158, 11, 0.35)');
+      setBadge(cardBadge, 'Scan QR', 'rgba(245, 158, 11, 0.15)', 'var(--color-warning, #F59E0B)', '1px solid rgba(245, 158, 11, 0.35)');
     } else {
-      provBadge.textContent = 'Disconnected';
-      provBadge.style.background = '#F3F4F6';
-      provBadge.style.color = '#4B5563';
-      cardBadge.textContent = 'Disconnected';
-      cardBadge.style.background = '#F3F4F6';
-      cardBadge.style.color = '#4B5563';
+      setBadge(provBadge, 'Disconnected', 'rgba(148, 163, 184, 0.12)', 'var(--color-ink-muted, #94A3B8)', '1px solid var(--color-border)');
+      setBadge(cardBadge, 'Disconnected', 'rgba(148, 163, 184, 0.12)', 'var(--color-ink-muted, #94A3B8)', '1px solid var(--color-border)');
     }
   }
 

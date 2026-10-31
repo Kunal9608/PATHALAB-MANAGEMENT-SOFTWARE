@@ -52,6 +52,16 @@ async def lifespan(app: FastAPI):
             
     if settings.is_production:
         logger.info("Production environment: Schema evolution is managed via explicit Alembic migrations.")
+        try:
+            from backend.app.core.db import engine
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("Production database connectivity verified.")
+        except Exception as e:
+            logger.critical(f"FATAL: Production database connectivity verification failed: {e}")
+            import sys
+            sys.exit(1)
     else:
         for attempt in range(1, 4):
             try:
@@ -178,11 +188,11 @@ async def clean_urls_middleware(request: Request, call_next):
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     
-    # 1. Content Security Policy (CSP)
+    # 1. Content Security Policy (CSP) - Hardened (SEC-10: removed 'unsafe-eval')
     # Allows self, Google Fonts, flatpickr, ChartJS, cloudflare QRcode.js, and Google reCAPTCHA
     csp_directives = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.google.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.google.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: blob: https://api.qrserver.com; "

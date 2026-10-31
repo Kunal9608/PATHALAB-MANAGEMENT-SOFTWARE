@@ -88,6 +88,10 @@ TESTS_SEED = [
 
 
 def seed():
+    if settings.is_production and os.getenv("ALLOW_PRODUCTION_SEED", "false").lower() not in ("true", "1", "yes"):
+        print("  [SECURITY] Development seed script execution is strictly disabled in production.")
+        return
+
     print("\nRunning seed script...")
     db = SessionLocal()
     try:
@@ -126,17 +130,19 @@ def seed():
             else:
                 # In development, write to local private file to avoid terminal capture
                 try:
-                    with open(".admin_bootstrap_token", "w") as f:
+                    token_path = ROOT / ".admin_bootstrap_token"
+                    # Open with restricted permissions
+                    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+                    mode = 0o600
+                    with open(os.open(token_path, flags, mode), "w") as f:
                         f.write(f"{admin_email}:{temp_pwd}\n")
                     print("  [INFO] Temporary bootstrap credentials saved to local .admin_bootstrap_token (non-production only).")
                 except Exception:
                     print("  [INFO] Temporary admin password provisioned.")
         else:
-            # Do NOT reset or overwrite password on restart if admin already exists
-            existing_admin.email = admin_email
-            existing_admin.is_active = True
-            db.flush()
-            print(f"  [OK] Admin account verified: {admin_email}")
+            # Do NOT reset or overwrite password or active status on restart if admin already exists
+            # Disabled administrative accounts must remain disabled across restarts/seeds
+            print(f"  [OK] Admin account verified (status preserved): {admin_email} (is_active={existing_admin.is_active})")
 
         # ── 65 Tests ────────────────────────────────────────────────────────
         existing_test_names = {r[0] for r in db.query(Test.name).all()}

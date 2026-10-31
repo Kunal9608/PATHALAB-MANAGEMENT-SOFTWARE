@@ -33,11 +33,12 @@ class WhatsAppServiceClient:
             urls.append(self._effective_url)
         if self.service_url and self.service_url not in urls:
             urls.append(self.service_url)
+        port = settings.WHATSAPP_SERVICE_PORT
         for candidate in [
-            "http://whatsapp:3001",
-            "http://host.docker.internal:3001",
-            "http://127.0.0.1:3001",
-            "http://localhost:3001",
+            f"http://whatsapp:{port}",
+            f"http://host.docker.internal:{port}",
+            f"http://127.0.0.1:{port}",
+            f"http://localhost:{port}",
         ]:
             if candidate not in urls:
                 urls.append(candidate)

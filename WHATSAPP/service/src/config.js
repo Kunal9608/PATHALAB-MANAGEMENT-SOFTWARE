@@ -19,7 +19,7 @@ if (fs.existsSync(ROOT_ENV_PATH)) {
 const config = {
   // Service configuration
   enabled: process.env.WHATSAPP_ENABLED !== 'false',
-  port: parseInt(process.env.WHATSAPP_SERVICE_PORT || '3001', 10),
+  port: parseInt(process.env.WHATSAPP_SERVICE_PORT || '8005', 10),
   host: process.env.WHATSAPP_SERVICE_HOST || '0.0.0.0',
   serviceToken: process.env.WHATSAPP_SERVICE_TOKEN || '',
 
@@ -46,4 +46,21 @@ const config = {
   labPhone: process.env.LAB_PHONE || '9876543210'
 };
 
+function validateConfig(cfg = config) {
+  const isProd = process.env.NODE_ENV === 'production' || process.env.ENVIRONMENT === 'production';
+  if (isProd && cfg.enabled) {
+    const knownInsecure = ['pathlab_wa_sec_token_9f83a21b47c0e6', 'change_me', 'secret', 'password'];
+    if (!cfg.serviceToken || knownInsecure.includes(cfg.serviceToken) || cfg.serviceToken.length < 16) {
+      throw new Error('[FATAL] WHATSAPP_SERVICE_TOKEN must be configured with a secure token. Missing or using an insecure placeholder, or too short (minimum 16 chars) in production.');
+    }
+  }
+}
+
+// Perform validation on load if production
+if (process.env.NODE_ENV === 'production' || process.env.ENVIRONMENT === 'production') {
+  validateConfig(config);
+}
+
 module.exports = config;
+module.exports.validateConfig = validateConfig;
+

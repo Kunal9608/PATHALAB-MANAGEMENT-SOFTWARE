@@ -160,6 +160,7 @@ def update_doctor(db: Session, doctor_id: uuid.UUID, payload, actor_id: uuid.UUI
 
 
 def _test_to_dict(test) -> dict:
+    param_count = len(test.parameters) if getattr(test, "parameters", None) is not None else 0
     return {
         "id": str(test.id),
         "test_code": test.test_code,
@@ -167,6 +168,7 @@ def _test_to_dict(test) -> dict:
         "description": test.category or "",  # category shown as 'Description' column in UI
         "price": float(test.price),
         "category": test.category,
+        "parameters_count": param_count,
         "is_active": test.is_active,
         "created_at": test.created_at.isoformat() if test.created_at else None,
     }

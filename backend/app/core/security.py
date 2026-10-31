@@ -56,6 +56,50 @@ def verify_password(plain: str, hashed: str) -> Tuple[bool, bool]:
         return (False, False)
 
 
+# Precomputed constant Argon2id dummy hash for timing attack mitigation (SEC-06).
+DUMMY_ARGON2_HASH = ph.hash("PathLabOS-TimingMitigation-DummyHash-Argon2id-Constant")
+
+
+def verify_dummy_password(plain: str) -> None:
+    """Performs dummy Argon2id verification for nonexistent accounts to prevent timing enumeration."""
+    try:
+        ph.verify(DUMMY_ARGON2_HASH, _apply_pepper(plain))
+    except Exception:
+        pass
+
+
+def normalize_aadhar(aadhar: str) -> str:
+    """Normalize Aadhaar identifier: strip whitespace and hyphens, require exactly 12 digits."""
+    if not aadhar:
+        raise ValueError("Aadhaar identifier cannot be empty")
+    import re
+    cleaned = re.sub(r"[\s\-]", "", str(aadhar).strip())
+    if not re.match(r"^\d{12}$", cleaned):
+        raise ValueError("Aadhaar must be exactly 12 digits")
+    return cleaned
+
+
+def hash_aadhar(aadhar: str) -> bytes:
+    """
+    Keyed HMAC-SHA256 for Aadhaar deduplication and matching (SEC-03).
+    Uses dedicated high-entropy AADHAAR_PEPPER from settings.
+    """
+    cleaned = normalize_aadhar(aadhar)
+    pepper = settings.AADHAAR_PEPPER
+    if not pepper:
+        pepper = "dev-fallback-aadhaar-hmac-pepper-never-in-production"
+    return hmac.new(pepper.encode("utf-8"), cleaned.encode("utf-8"), hashlib.sha256).digest()
+
+
+def legacy_hash_aadhar(aadhar: str) -> bytes:
+    """
+    Legacy unsalted SHA-256 digest for backward-compatibility lookup of existing records.
+    Used exclusively for duplicate-check migrations.
+    """
+    cleaned = normalize_aadhar(aadhar)
+    return hashlib.sha256(cleaned.encode("utf-8")).digest()
+
+
 def create_access_token(user_id: str, role: str, session_id: Optional[str] = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
     payload = {

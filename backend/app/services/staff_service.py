@@ -7,14 +7,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.app.core.security import hash_password
+from backend.app.core.security import hash_password, normalize_aadhar, hash_aadhar, legacy_hash_aadhar
 from backend.app.repositories import user_repo
 from backend.app.services import audit_service, notification_service
-from backend.app.models.user import RoleEnum, ViewScopeEnum
-
-
-import hashlib
-from backend.app.models.user import User
+from backend.app.models.user import RoleEnum, ViewScopeEnum, User
+from sqlalchemy import or_
 
 
 def generate_staff_code(db: Session, year: int) -> str:
@@ -50,15 +47,20 @@ def create_staff(db: Session, payload, actor_user_id: uuid.UUID, background_task
         if existing_mobile:
             raise ValueError("Mobile number already registered")
 
-    # Check duplicate Aadhar
+    # Check duplicate Aadhar using keyed HMAC with legacy fallback
     aadhar_hash = None
     aadhar_last4 = None
     if payload.aadhar:
-        aadhar_hash = hashlib.sha256(payload.aadhar.encode()).digest()
-        existing_aadhar = db.query(User).filter(User.aadhar_encrypted == aadhar_hash).first()
+        normalized = normalize_aadhar(payload.aadhar)
+        hmac_digest = hash_aadhar(normalized)
+        legacy_digest = legacy_hash_aadhar(normalized)
+        existing_aadhar = db.query(User).filter(
+            or_(User.aadhar_encrypted == hmac_digest, User.aadhar_encrypted == legacy_digest)
+        ).first()
         if existing_aadhar:
             raise ValueError("Aadhar number already registered")
-        aadhar_last4 = payload.aadhar[-4:]
+        aadhar_hash = hmac_digest
+        aadhar_last4 = normalized[-4:]
 
     temp_pw = _gen_temp_password()
     pw_hash = hash_password(temp_pw)
@@ -127,17 +129,25 @@ def update_staff(db: Session, staff_id: uuid.UUID, payload, actor_user_id: uuid.
     if "aadhar" in updates:
         aadhar_val = updates.pop("aadhar")
         if aadhar_val:
-            aadhar_hash = hashlib.sha256(aadhar_val.encode()).digest()
-            existing = db.query(User).filter(User.aadhar_encrypted == aadhar_hash, User.id != staff_id).first()
+            normalized = normalize_aadhar(aadhar_val)
+            hmac_digest = hash_aadhar(normalized)
+            legacy_digest = legacy_hash_aadhar(normalized)
+            existing = db.query(User).filter(
+                or_(User.aadhar_encrypted == hmac_digest, User.aadhar_encrypted == legacy_digest),
+                User.id != staff_id
+            ).first()
             if existing:
                 raise ValueError("Aadhar number already registered by another staff")
-            updates["aadhar_encrypted"] = aadhar_hash
-            updates["aadhar_last4"] = aadhar_val[-4:]
+            updates["aadhar_encrypted"] = hmac_digest
+            updates["aadhar_last4"] = normalized[-4:]
 
     user_repo.update_user(db, staff_id, **updates)
+    audit_after = {k: v for k, v in updates.items() if k != "aadhar_encrypted"}
+    if "aadhar_encrypted" in updates:
+        audit_after["aadhar_updated"] = True
     audit_service.log(db, "staff.edit", actor_user_id=actor_user_id,
                       entity_type="user", entity_id=staff_id,
-                      before=before, after=updates)
+                      before=before, after=audit_after)
     db.commit()
 
     staff = user_repo.get_by_id(db, staff_id)

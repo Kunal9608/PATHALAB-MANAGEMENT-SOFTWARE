@@ -266,192 +266,40 @@
   <!-- Brand -->
   <div class="kiosk-header">
     <h1 class="kiosk-brand">Akriti Diagnostics</h1>
-    <div class="kiosk-subtitle">Attendance Kiosk — Face Recognition</div>
+    <div class="kiosk-subtitle">Attendance Kiosk — Biometric Module Disabled</div>
   </div>
 
-  <!-- Camera area -->
-  <div class="kiosk-camera-area">
-    <div class="scanning-ring-outer"></div>
-    <div class="scanning-arc"></div>
-    <div class="scanning-ring-inner"></div>
-    <div class="kiosk-video-wrap" id="kiosk-video-wrap">
-      <video id="kiosk-video" autoplay muted playsinline></video>
-      <canvas id="kiosk-canvas"></canvas>
+  <!-- Disabled Notice Area -->
+  <div class="kiosk-status" style="max-width: 480px; text-align: center; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 32px 24px;">
+    <div style="font-size: 40px; margin-bottom: 12px;">🔒</div>
+    <div class="status-main" id="status-main" style="color: #E8F4F0; font-size: 18px; margin-bottom: 8px;">Biometric Recognition Disabled</div>
+    <div class="status-sub" id="status-sub" style="color: rgba(232,244,240,0.6); font-size: 14px; line-height: 1.5;">
+      Facial recognition attendance is intentionally disabled in PathLab OS. Staff attendance must be managed through authorized staff administrative check-in.
     </div>
-  </div>
-
-  <!-- Status -->
-  <div class="kiosk-status">
-    <div class="status-main" id="status-main">Initializing camera…</div>
-    <div class="status-sub" id="status-sub">Please wait</div>
   </div>
 
   <!-- Actions -->
   <div class="kiosk-actions">
-    <button class="kiosk-btn kiosk-btn-primary" id="capture-btn" disabled>Capture</button>
+    <button class="kiosk-btn kiosk-btn-primary" id="capture-btn" disabled style="opacity: 0.4; cursor: not-allowed;">Capture Disabled</button>
     <button class="kiosk-btn kiosk-btn-ghost" id="back-btn">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px"><polyline points="15 18 9 12 15 6"/></svg>
-      Back
+      Back to Attendance
     </button>
-  </div>
-
-  <!-- Recent log -->
-  <div class="kiosk-log-card">
-    <div class="kiosk-log-title">Recent Check-ins</div>
-    <div id="kiosk-log-list">
-      <div class="kiosk-log-item" style="color:rgba(232,244,240,0.25);font-size:13px">No check-ins yet</div>
-    </div>
   </div>
 </div>
 
 <div id="toast-container"></div>
 
-<script src="/assets/js/toast.js"></script>
-<script src="/assets/js/cache-manager.js"></script>
-<script src="/assets/js/api-client.js"></script>
-<script src="/assets/js/face-capture.js"></script>
-<script src="/assets/js/offline-queue.js"></script>
 <script>
-(async function() {
-  const statusMain = document.getElementById('status-main');
-  const statusSub  = document.getElementById('status-sub');
-  const captureBtn = document.getElementById('capture-btn');
-  const offlineBanner = document.getElementById('kiosk-offline-banner');
-  const logList = document.getElementById('kiosk-log-list');
-  const recentLog = [];
-
-  let fc = null;
-  let isCapturing = false;
-  let autoScanInterval = null;
-
-  // ── Init camera ────────────────────────────────────────────────────────────
-  fc = new FaceCapture({
-    videoEl: 'kiosk-video',
-    canvasEl: 'kiosk-canvas',
-    mirror: true,
-    onError: (msg) => {
-      statusMain.textContent = 'Camera Error';
-      statusSub.textContent = msg;
-    },
-  });
-
-  const started = await fc.start();
-  if (started) {
-    statusMain.textContent = 'Ready';
-    statusSub.textContent = 'Position face within the circle';
-    captureBtn.disabled = false;
-
-    // Auto-scan every 3s
-    autoScanInterval = setInterval(doCapture, 3000);
-  }
-
-  // ── Connectivity ──────────────────────────────────────────────────────────
-  async function checkConnectivity() {
-    try {
-      const res = await fetch('/health', { method: 'GET', cache: 'no-store' });
-      const online = res.ok;
-      offlineBanner.classList.toggle('show', !online);
-    } catch {
-      offlineBanner.classList.add('show');
+  // Biometric camera access and auto-scan are intentionally disabled in PathLab OS (SEC-02, SEC-04).
+  document.getElementById('back-btn').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.location.href = '/staff/attendance';
     }
-  }
-  checkConnectivity();
-  setInterval(checkConnectivity, 30000);
-
-  // ── Capture & recognize ───────────────────────────────────────────────────
-  async function doCapture() {
-    if (isCapturing || !fc) return;
-    isCapturing = true;
-
-    const frame = fc.captureFrame(true);
-    if (!frame) {
-      isCapturing = false;
-      return; // blank frame, skip silently
-    }
-
-    const idempotencyKey = API.uuidv4();
-
-    try {
-      let res;
-      const isOnline = await OfflineQueue.isOnline();
-      if (!isOnline) {
-        // Queue offline
-        await OfflineQueue.enqueue('/api/v1/attendance/recognize', 'POST', { image_data: frame }, idempotencyKey);
-        setStatus('Offline', 'Check-in queued locally', false);
-        isCapturing = false;
-        return;
-      }
-
-      res = await API.post('/api/v1/attendance/recognize', { image_data: frame }, { idempotencyKey, silent: true });
-
-      if (res.recognized && res.staff_name) {
-        // Flash green
-        document.getElementById('kiosk-video-wrap').classList.add('video-flash');
-        setTimeout(() => document.getElementById('kiosk-video-wrap').classList.remove('video-flash'), 900);
-
-        const action = res.action || 'Checked In';
-        const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-
-        setStatus(`${res.staff_name}`, `${action} at ${timeStr}`, true);
-        addToLog(res.staff_name, action, timeStr);
-      } else if (res.low_confidence) {
-        setStatus('Face not recognized', `Confidence: ${(res.confidence * 100).toFixed(0)}% — try again`, false);
-      }
-      // If no face detected at all, remain silent (auto-scan)
-    } catch (err) {
-      // Silently ignore failed auto-scan attempts
-    } finally {
-      isCapturing = false;
-    }
-  }
-
-  function setStatus(main, sub, success = false) {
-    statusMain.textContent = main;
-    statusMain.className   = 'status-main' + (success ? ' recognized' : '');
-    statusSub.textContent  = sub;
-    // Reset after 4s
-    setTimeout(() => {
-      statusMain.textContent = 'Ready';
-      statusMain.className   = 'status-main';
-      statusSub.textContent  = 'Position face within the circle';
-    }, 4000);
-  }
-
-  function addToLog(name, action, time) {
-    recentLog.unshift({ name, action, time });
-    if (recentLog.length > 5) recentLog.pop();
-    logList.innerHTML = recentLog.map(e => `
-      <div class="kiosk-log-item">
-        <div class="kiosk-log-dot"></div>
-        <div>
-          <div class="kiosk-log-name">${escapeHtml(e.name)}</div>
-          <div class="kiosk-log-time">${escapeHtml(e.action)} · ${escapeHtml(e.time)}</div>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  // Manual capture button
-  captureBtn.addEventListener('click', doCapture);
-
-  // Back button
-  document.getElementById('back-btn').addEventListener('click', () => {
-    if (autoScanInterval) clearInterval(autoScanInterval);
-    fc?.stop();
-    history.back();
   });
-
-  // Cleanup on unload
-  window.addEventListener('beforeunload', () => {
-    if (autoScanInterval) clearInterval(autoScanInterval);
-    fc?.stop();
-  });
-
-  // Helper (inline since shell.js not loaded here)
-  function escapeHtml(str) {
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-})();
 </script>
 </body>
 </html>

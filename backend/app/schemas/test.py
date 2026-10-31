@@ -40,6 +40,7 @@ class TestResponse(BaseModel):
     name: str
     price: float
     category: Optional[str]
+    parameters_count: Optional[int] = 0
     is_active: bool
     created_at: datetime
 

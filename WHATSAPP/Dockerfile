@@ -16,10 +16,13 @@ RUN npm install --omit=dev
 WORKDIR /app
 COPY WHATSAPP/service ./WHATSAPP/service
 
-# Ensure session directory exists
-RUN mkdir -p /app/WHATSAPP/session
+# Ensure session directory exists and is owned by non-root node user (SEC-09)
+RUN mkdir -p /app/WHATSAPP/session && chown -R node:node /app/WHATSAPP/session
 
-EXPOSE 3001
+# Switch to unprivileged node user
+USER node
+
+EXPOSE 8005
 
 # Run the WhatsApp microservice
 CMD ["node", "WHATSAPP/service/src/server.js"]

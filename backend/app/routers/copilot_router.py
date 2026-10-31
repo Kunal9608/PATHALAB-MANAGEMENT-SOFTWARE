@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 from backend.app.core.db import get_db
 from backend.app.dependencies import get_current_user, require_admin
 from backend.app.models.user import User
+from backend.app.models.copilot_message import CopilotMessage
 from backend.app.config import settings
 from backend.app.services.copilot_service import build_copilot_context_async
 from backend.app.core.copilot_cache import cache_metrics
@@ -27,6 +28,25 @@ class ChatRequest(BaseModel):
 # In-memory store for rate limiting: { "user_id": [datetime1, datetime2] }
 user_chat_timestamps = {}
 
+
+def _save_copilot_message(db: Session, user_id, role: str, content: str):
+    """Safely persist conversation turn to PostgreSQL with user isolation."""
+    try:
+        msg = CopilotMessage(
+            user_id=user_id,
+            role="assistant" if role == "assistant" else "user",
+            content=str(content)[:2500]
+        )
+        db.add(msg)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to persist Copilot message turn: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 @router.post("/chat")
 async def chat_with_copilot(
     request: ChatRequest,
@@ -39,6 +59,14 @@ async def chat_with_copilot(
     """
     global user_chat_timestamps
     t_start = time.time()
+
+    # Bounded input sanitization (max 1000 characters)
+    clean_message = (request.message or "").strip()[:1000]
+    if not clean_message:
+        async def empty_stream():
+            yield f"data: {json.dumps('Please enter a question or query regarding Akriti Diagnostics laboratory operations or tests.')}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(empty_stream(), media_type="text/event-stream")
 
     # --- Role-based Rate Limiting (Admin: 10 msg/min, Staff: 5 msg/min) ---
     role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
@@ -72,10 +100,10 @@ async def chat_with_copilot(
 
     # Step 1: Deterministic Backend Retrieval with Redis-first Cache-Aside & Conversation Memory
     system_prompt, direct_response, lookup_result = await build_copilot_context_async(
-        request.message, current_user, db, history=request.history
+        clean_message, current_user, db, history=request.history
     )
 
-    # Step 2: Authoritative terminal status (not_found, invalid_input, forbidden, service_unavailable)
+    # Step 2: Authoritative terminal status (not_found, invalid_input, forbidden, out-of-domain)
     # Stream the verified authoritative answer directly to the client.
     # Zero LLM call, zero latency, zero tokens wasted, 100% zero hallucination guarantee!
     if direct_response:
@@ -85,6 +113,10 @@ async def chat_with_copilot(
             f"Copilot direct response: status={getattr(lookup_result, 'status', 'direct')} | "
             f"source={source_label} | cached={getattr(lookup_result, 'is_cached', False)} | latency={t_total:.2f}ms"
         )
+        # Persist conversation turn
+        _save_copilot_message(db, current_user.id, "user", clean_message)
+        _save_copilot_message(db, current_user.id, "assistant", direct_response)
+
         async def direct_stream():
             yield f"data: {json.dumps(direct_response)}\n\n"
             yield "data: [DONE]\n\n"
@@ -125,6 +157,9 @@ async def chat_with_copilot(
             yield "data: [DONE]\n\n"
         return StreamingResponse(missing_key_stream(), media_type="text/event-stream")
 
+    # Persist the incoming user message
+    _save_copilot_message(db, current_user.id, "user", clean_message)
+
     async def event_generator():
         last_error = None
         for prov in providers:
@@ -138,7 +173,9 @@ async def chat_with_copilot(
                 llm_messages = [{"role": "system", "content": system_prompt}]
                 if request.history:
                     for h in request.history[-5:]:
-                        h_role = h.get("role", "user")
+                        # Security: Client history CANNOT supply 'system' or 'developer' role
+                        raw_role = str(h.get("role", "user")).lower()
+                        h_role = "assistant" if raw_role == "assistant" else "user"
                         h_content = str(h.get("content", ""))
                         if not h_content:
                             continue
@@ -157,7 +194,7 @@ async def chat_with_copilot(
                         elif len(h_content) > 300:
                             h_content = h_content[:300] + "..."
                         llm_messages.append({"role": h_role, "content": h_content})
-                llm_messages.append({"role": "user", "content": request.message})
+                llm_messages.append({"role": "user", "content": clean_message})
 
                 create_kwargs: Dict[str, Any] = {
                     "model": prov["model"],
@@ -173,6 +210,7 @@ async def chat_with_copilot(
                 response = await client.chat.completions.create(**create_kwargs)
                 has_yielded = False
                 in_think_block = False
+                full_reply_chunks = []
 
                 async for chunk in response:
                     if not chunk.choices:
@@ -191,9 +229,13 @@ async def chat_with_copilot(
                     
                     if not in_think_block and delta_content:
                         has_yielded = True
+                        full_reply_chunks.append(delta_content)
                         yield f"data: {json.dumps(delta_content)}\n\n"
 
                 if has_yielded:
+                    # Persist assistant response
+                    accumulated_reply = "".join(full_reply_chunks)
+                    _save_copilot_message(db, current_user.id, "assistant", accumulated_reply)
                     yield "data: [DONE]\n\n"
                     return
             except Exception as e:
@@ -206,6 +248,53 @@ async def chat_with_copilot(
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/conversations")
+def get_copilot_conversations(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve current authenticated user's private saved Copilot conversation history.
+    Strictly isolated by user_id.
+    """
+    safe_limit = min(max(1, limit), 100)
+    messages = (
+        db.query(CopilotMessage)
+        .filter(CopilotMessage.user_id == current_user.id)
+        .order_by(CopilotMessage.created_at.asc())
+        .limit(safe_limit)
+        .all()
+    )
+    return [
+        {
+            "id": str(m.id),
+            "role": m.role,
+            "content": m.content,
+            "created_at": m.created_at.isoformat() if m.created_at else None
+        }
+        for m in messages
+    ]
+
+
+@router.delete("/conversations")
+def clear_copilot_conversations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Clear current authenticated user's private Copilot conversation history.
+    Strictly deletes only the calling user's records.
+    """
+    deleted = (
+        db.query(CopilotMessage)
+        .filter(CopilotMessage.user_id == current_user.id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"status": "success", "deleted_count": deleted}
 
 
 @router.get("/metrics")

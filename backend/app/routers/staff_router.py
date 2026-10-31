@@ -64,37 +64,10 @@ def deactivate_staff(staff_id: str, admin=Depends(require_admin),
 
 
 @router.post("/{staff_id}/face-enroll")
-async def face_enroll(staff_id: str, image: UploadFile = File(...),
-                      current_user=Depends(get_current_user),
-                      db: Session = Depends(get_db)):
-    import uuid
+def face_enroll(staff_id: str):
+    """Biometric face enrollment is intentionally disabled in PathLab OS (SEC-02, SEC-04)."""
     from fastapi import HTTPException
-    from backend.app.models.user import RoleEnum
-    
-    target_uuid = uuid.UUID(staff_id)
-    if current_user.role != RoleEnum.admin and current_user.id != target_uuid:
-        raise HTTPException(
-            status_code=403,
-            detail="You are not authorized to enroll face data for this staff member"
-        )
-    
-    # Stream read with strict maximum limit to prevent memory exhaustion
-    from backend.app.core.upload_security import read_upload_file_bounded, execute_secure_upload_pipeline
-    allowed_image_exts = (".jpg", ".jpeg", ".png", ".webp")
-    max_enroll_size = 10 * 1024 * 1024  # 10MB
-    try:
-        image_bytes = await read_upload_file_bounded(image, max_size=max_enroll_size)
-        pipeline_res = execute_secure_upload_pipeline(
-            file_bytes=image_bytes,
-            original_filename=image.filename,
-            allowed_extensions=allowed_image_exts,
-            max_size=max_enroll_size,
-            context="face_enroll"
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        )
-
-    return face_service.enroll_sample(db, target_uuid, image_bytes)
+    raise HTTPException(
+        status_code=501,
+        detail="Biometric face enrollment is intentionally disabled in PathLab OS."
+    )

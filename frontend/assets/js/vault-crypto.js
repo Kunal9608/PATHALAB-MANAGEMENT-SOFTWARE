@@ -82,7 +82,7 @@
       },
       keyMaterial,
       { name: 'AES-GCM', length: 256 },
-      true, // extractable for tab-scoped sessionStorage persistence
+      false, // strictly non-extractable: cannot be exported by untrusted scripts or XSS
       ['encrypt', 'decrypt']
     );
   }
@@ -115,7 +115,7 @@
     async tryRestoreTabSession(adminId) {
       if (!adminId) return false;
 
-      // 1. Check in-memory session first
+      // In-memory SPA session check (never exposes raw keys to storage)
       if (window.__vaultSession && window.__vaultSession.key && window.__vaultSession.adminId === adminId) {
         _activeCryptoKey = window.__vaultSession.key;
         _activeSalt = window.__vaultSession.salt;
@@ -123,38 +123,14 @@
         return true;
       }
 
-      // 2. Check tab-scoped sessionStorage
-      const keyHex = sessionStorage.getItem('akriti_vault_tab_key_' + adminId);
-      if (!keyHex) return false;
-
-      try {
-        const rawKey = hexToBytes(keyHex);
-        const importedKey = await window.crypto.subtle.importKey(
-          'raw',
-          rawKey,
-          { name: 'AES-GCM', length: 256 },
-          true,
-          ['encrypt', 'decrypt']
-        );
-
-        _activeCryptoKey = importedKey;
-        _adminId = adminId;
-        window.__vaultSession = {
-          key: importedKey,
-          salt: null,
-          adminId: adminId
-        };
-        return true;
-      } catch (err) {
-        console.warn('Failed to restore vault tab key:', err);
-        sessionStorage.removeItem('akriti_vault_tab_key_' + adminId);
-        return false;
-      }
+      // Cleanup any legacy storage keys
+      sessionStorage.removeItem('akriti_vault_tab_key_' + adminId);
+      return false;
     },
 
     /**
      * Unlock vault using passphrase.
-     * Persists ephemeral unlock state in sessionStorage for active browser tab lifecycle.
+     * Keeps non-extractable CryptoKey in memory during active browser session.
      */
     async unlockVault(passphrase, adminId) {
       if (!passphrase || !passphrase.trim()) {
@@ -176,15 +152,10 @@
         adminId: adminId
       };
 
-      // Persist raw key in tab-scoped sessionStorage for seamless refresh / theme toggle
+      // Set unlock flag for tab (boolean only, zero raw keys stored in storage)
       try {
-        const rawKey = await window.crypto.subtle.exportKey('raw', _activeCryptoKey);
-        const keyHex = bytesToHex(new Uint8Array(rawKey));
-        sessionStorage.setItem('akriti_vault_tab_key_' + adminId, keyHex);
         sessionStorage.setItem('akriti_vault_unlocked_' + adminId, '1');
-      } catch (exportErr) {
-        console.warn('Tab key export warning:', exportErr);
-      }
+      } catch (_) {}
 
       window.dispatchEvent(new CustomEvent('vault:unlock'));
       return true;

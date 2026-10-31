@@ -58,9 +58,9 @@
 
 <!-- Add/Edit Test Modal -->
 <div class="modal-backdrop" id="test-modal">
-  <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="test-modal-title">
+  <div class="modal" style="max-width:540px;width:95%" role="dialog" aria-modal="true" aria-labelledby="test-modal-title">
     <div class="modal-header">
-      <h2 class="modal-title" id="test-modal-title">Add Test</h2>
+      <h2 class="modal-title" id="test-modal-title">Add Test to Catalog</h2>
       <button class="modal-close" id="test-modal-close" aria-label="Close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -68,21 +68,59 @@
     <div class="modal-body">
       <form id="test-form" novalidate>
         <input type="hidden" id="test-id">
-        <div class="form-field mb-4" id="test-code-row" style="display:none">
-          <label class="form-label" for="test-code-val">Test ID</label>
+        <div class="form-field mb-3" id="test-code-row" style="display:none">
+          <label class="form-label" for="test-code-val">Test Code</label>
           <input class="form-input" type="text" id="test-code-val" disabled>
         </div>
-        <div class="form-field mb-4">
+        <div class="form-field mb-3">
           <label class="form-label" for="test-name">Test Name <span class="required">*</span></label>
-          <input class="form-input" type="text" id="test-name" placeholder="e.g. CBC 5 Part">
+          <input class="form-input" type="text" id="test-name" placeholder="e.g. CBC 5 Part, Dengue NS1, USG Whole Abdomen">
         </div>
-        <div class="form-field mb-4">
-          <label class="form-label" for="test-price">Price (INR) <span class="required">*</span></label>
-          <input class="form-input" type="number" id="test-price" min="1" step="1" placeholder="e.g. 230">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" class="mb-3">
+          <div class="form-field">
+            <label class="form-label" for="test-price">Price (₹) <span class="required">*</span></label>
+            <input class="form-input" type="number" id="test-price" min="0" step="1" placeholder="e.g. 350">
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="test-category">Department / Category</label>
+            <select class="form-select" id="test-category">
+              <option value="Hematology">Hematology</option>
+              <option value="Biochemistry">Biochemistry</option>
+              <option value="Clinical Pathology">Clinical Pathology</option>
+              <option value="Serology & Immunology">Serology & Immunology</option>
+              <option value="Microbiology & Culture">Microbiology & Culture</option>
+              <option value="Endocrinology">Endocrinology & Hormones</option>
+              <option value="Radiology & Imaging">Radiology & Imaging</option>
+              <option value="Histopathology">Histopathology & Cytology</option>
+              <option value="General">General</option>
+            </select>
+          </div>
         </div>
-        <div class="form-field">
-          <label class="form-label" for="test-desc">Description</label>
-          <input class="form-input" type="text" id="test-desc" placeholder="Optional notes">
+        <div class="form-field mb-3" id="test-preset-row">
+          <label class="form-label" for="test-preset">Report Format Template</label>
+          <select class="form-select" id="test-preset">
+            <option value="none">-- Set Parameters Manually --</option>
+            <option value="numeric">Single Numeric (Measured Value + Ref Range)</option>
+            <option value="cbc">CBC - Complete Blood Count (18 Parameters)</option>
+            <option value="lft">LFT - Liver Function Test (10 Parameters)</option>
+            <option value="kft">KFT - Kidney Function Test (8 Parameters)</option>
+            <option value="lipid">Lipid Profile (7 Parameters)</option>
+            <option value="urine">Urine Routine & Microscopy (13 Parameters)</option>
+            <option value="serology">Serology / Rapid Card (Reactive / Non-Reactive)</option>
+            <option value="imaging">Descriptive / Imaging (Findings, Impression & Attachment)</option>
+            <option value="culture">Culture & Sensitivity (Organism & Antibiotics)</option>
+          </select>
+          <span style="font-size:11px;color:var(--color-ink-muted);margin-top:3px;display:block">Standard parameters will be pre-filled automatically for easy editing.</span>
+        </div>
+        <div class="form-field mb-3">
+          <label class="form-label" for="test-desc">Clinical Notes / Sample Type</label>
+          <input class="form-input" type="text" id="test-desc" placeholder="e.g. Fasting blood sample, Plain vial, Spot urine">
+        </div>
+        <div class="form-field mb-1" id="test-open-params-wrap" style="display:flex;align-items:center;gap:8px;background:var(--color-bg);padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border)">
+          <input type="checkbox" id="test-open-params-chk" checked style="width:16px;height:16px;cursor:pointer">
+          <label for="test-open-params-chk" style="font-size:12px;font-weight:600;color:var(--color-ink);cursor:pointer;margin:0">
+            Open Report Parameter Editor immediately after saving
+          </label>
         </div>
       </form>
     </div>
@@ -111,46 +149,53 @@
 
 <!-- Test Parameters Modal -->
 <div class="modal-backdrop" id="parameters-modal">
-  <div class="modal" style="max-width:880px;width:96%" role="dialog" aria-modal="true" aria-labelledby="params-modal-title">
+  <div class="modal" style="max-width:960px;width:96%" role="dialog" aria-modal="true" aria-labelledby="params-modal-title">
     <div class="modal-header" style="border-bottom:1px solid var(--color-border);padding:16px 20px">
       <div>
-        <h2 class="modal-title" id="params-modal-title" style="font-size:18px;color:var(--color-ink)">Manage Test Parameters</h2>
-        <p style="font-size:12px;color:var(--color-ink-muted);margin:2px 0 0">Configure structured report format, reference ranges, and image/PDF attachment support.</p>
+        <h2 class="modal-title" id="params-modal-title" style="font-size:18px;color:var(--color-ink)">Report Format & Parameters</h2>
+        <p style="font-size:12px;color:var(--color-ink-muted);margin:2px 0 0">Define test parameters, units, reference ranges, dropdown choices, and narrative formats.</p>
       </div>
       <button class="modal-close" onclick="Modal.close('parameters-modal')" aria-label="Close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div class="modal-body" style="max-height:65vh;overflow-y:auto;padding:20px">
+    <div class="modal-body" style="max-height:68vh;overflow-y:auto;padding:20px">
       <div style="background:linear-gradient(135deg, var(--color-primary-tint) 0%, var(--color-bg) 100%);padding:12px 16px;border-radius:var(--radius-md);border:1px solid var(--color-border);margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span style="font-size:12px;font-weight:700;color:var(--color-primary)">⚡ Quick Presets:</span>
-          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('numeric_basic')">+ Numeric Grid</button>
-          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('imaging')">+ Imaging / Descriptive (X-Ray, USG, ECG)</button>
+          <span style="font-size:12px;font-weight:700;color:var(--color-primary)">⚡ Instant Presets:</span>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('numeric')">+ Numeric</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('cbc')">+ CBC</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('lft')">+ LFT</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('kft')">+ KFT</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('lipid')">+ Lipid</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('urine')">+ Urine R/E</button>
           <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('serology')">+ Serology (Pos/Neg)</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('imaging')">+ Imaging / Descriptive</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick="applyParameterPreset('culture')">+ Culture & Sensitivity</button>
+          <button type="button" class="btn btn-xs btn-ghost text-danger" onclick="clearParameterRows()">✕ Clear</button>
         </div>
-        <button type="button" class="btn btn-xs btn-secondary" onclick="seedStandardParameters()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Auto-Seed 65 Standard Indian Tests</button>
+        <button type="button" class="btn btn-xs btn-secondary" onclick="seedStandardParameters()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Auto-Seed 65 Standard Tests</button>
       </div>
 
       <table class="data-table" style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12px">
         <thead>
           <tr style="border-bottom:2px solid var(--color-border);color:var(--color-ink-muted);text-transform:uppercase">
             <th style="padding:8px 4px;width:24%;text-align:left">Parameter Name *</th>
-            <th style="padding:8px 4px;width:15%;text-align:left">Input Type</th>
+            <th style="padding:8px 4px;width:17%;text-align:left">Input Type</th>
             <th style="padding:8px 4px;width:12%;text-align:left">Unit</th>
-            <th style="padding:8px 4px;width:28%;text-align:left">Reference Range / Options</th>
-            <th style="padding:8px 4px;width:12%;text-align:left">Gender</th>
+            <th style="padding:8px 4px;width:26%;text-align:left">Reference Range / Options</th>
+            <th style="padding:8px 4px;width:11%;text-align:left">Gender</th>
             <th style="padding:8px 4px;width:6%;text-align:center">Order</th>
-            <th style="padding:8px 4px;width:3%"></th>
+            <th style="padding:8px 4px;width:4%;text-align:center"></th>
           </tr>
         </thead>
         <tbody id="parameters-table-body">
         </tbody>
       </table>
-      <button type="button" class="btn btn-sm btn-ghost" onclick="addParameterRow()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Parameter Row</button>
+      <button type="button" class="btn btn-sm btn-ghost" onclick="addParameterRow()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> + Add Parameter Row</button>
     </div>
     <div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <span style="font-size:11px;color:var(--color-ink-muted)">💡 Imaging/descriptive tests allow image/PDF file attachments during report generation.</span>
+      <span style="font-size:11px;color:var(--color-ink-muted)">💡 Reference range like "11.5 - 16.5" auto-calculates normal/abnormal flags and range charts on patient reports.</span>
       <div style="display:flex;gap:8px">
         <button type="button" class="btn btn-ghost" onclick="Modal.close('parameters-modal')">Cancel</button>
         <button type="button" class="btn btn-primary" id="save-parameters-btn">Save Parameters</button>
@@ -173,19 +218,119 @@
 
   let editingId = null;
 
+  const PRESETS_LIBRARY = {
+    numeric: [
+      { parameter_name: 'Measured Value', input_type: 'numeric', unit: '', reference_text: '', applicable_gender: 'all', display_order: 1 }
+    ],
+    cbc: [
+      { parameter_name: 'Hemoglobin (Hb)', input_type: 'numeric', unit: 'g/dL', reference_text: '13.0 - 17.0', applicable_gender: 'male', display_order: 1 },
+      { parameter_name: 'Hemoglobin (Hb)', input_type: 'numeric', unit: 'g/dL', reference_text: '12.0 - 15.5', applicable_gender: 'female', display_order: 2 },
+      { parameter_name: 'Total RBC Count', input_type: 'numeric', unit: 'million/µL', reference_text: '4.5 - 5.5', applicable_gender: 'male', display_order: 3 },
+      { parameter_name: 'Total RBC Count', input_type: 'numeric', unit: 'million/µL', reference_text: '3.5 - 4.5', applicable_gender: 'female', display_order: 4 },
+      { parameter_name: 'Total WBC Count', input_type: 'numeric', unit: '/µL', reference_text: '4,000 - 11,000', applicable_gender: 'all', display_order: 5 },
+      { parameter_name: 'Platelet Count', input_type: 'numeric', unit: '/µL', reference_text: '150,000 - 450,000', applicable_gender: 'all', display_order: 6 },
+      { parameter_name: 'Hematocrit (PCV)', input_type: 'numeric', unit: '%', reference_text: '40 - 52', applicable_gender: 'male', display_order: 7 },
+      { parameter_name: 'Hematocrit (PCV)', input_type: 'numeric', unit: '%', reference_text: '36 - 48', applicable_gender: 'female', display_order: 8 },
+      { parameter_name: 'MCV', input_type: 'numeric', unit: 'fL', reference_text: '80 - 100', applicable_gender: 'all', display_order: 9 },
+      { parameter_name: 'MCH', input_type: 'numeric', unit: 'pg', reference_text: '27 - 33', applicable_gender: 'all', display_order: 10 },
+      { parameter_name: 'MCHC', input_type: 'numeric', unit: 'g/dL', reference_text: '32 - 36', applicable_gender: 'all', display_order: 11 },
+      { parameter_name: 'RDW', input_type: 'numeric', unit: '%', reference_text: '11.5 - 14.5', applicable_gender: 'all', display_order: 12 },
+      { parameter_name: 'Neutrophils', input_type: 'numeric', unit: '%', reference_text: '40 - 70', applicable_gender: 'all', display_order: 13 },
+      { parameter_name: 'Lymphocytes', input_type: 'numeric', unit: '%', reference_text: '20 - 40', applicable_gender: 'all', display_order: 14 },
+      { parameter_name: 'Eosinophils', input_type: 'numeric', unit: '%', reference_text: '1 - 6', applicable_gender: 'all', display_order: 15 },
+      { parameter_name: 'Monocytes', input_type: 'numeric', unit: '%', reference_text: '2 - 8', applicable_gender: 'all', display_order: 16 },
+      { parameter_name: 'Basophils', input_type: 'numeric', unit: '%', reference_text: '0 - 1', applicable_gender: 'all', display_order: 17 }
+    ],
+    lft: [
+      { parameter_name: 'Bilirubin Total', input_type: 'numeric', unit: 'mg/dL', reference_text: '0.2 - 1.2', applicable_gender: 'all', display_order: 1 },
+      { parameter_name: 'Bilirubin Direct', input_type: 'numeric', unit: 'mg/dL', reference_text: '0.0 - 0.3', applicable_gender: 'all', display_order: 2 },
+      { parameter_name: 'Bilirubin Indirect', input_type: 'numeric', unit: 'mg/dL', reference_text: '0.1 - 0.9', applicable_gender: 'all', display_order: 3 },
+      { parameter_name: 'SGOT / AST', input_type: 'numeric', unit: 'U/L', reference_text: '5 - 40', applicable_gender: 'all', display_order: 4 },
+      { parameter_name: 'SGPT / ALT', input_type: 'numeric', unit: 'U/L', reference_text: '7 - 56', applicable_gender: 'all', display_order: 5 },
+      { parameter_name: 'Alkaline Phosphatase (ALP)', input_type: 'numeric', unit: 'U/L', reference_text: '44 - 147', applicable_gender: 'all', display_order: 6 },
+      { parameter_name: 'Total Protein', input_type: 'numeric', unit: 'g/dL', reference_text: '6.0 - 8.3', applicable_gender: 'all', display_order: 7 },
+      { parameter_name: 'Serum Albumin', input_type: 'numeric', unit: 'g/dL', reference_text: '3.5 - 5.5', applicable_gender: 'all', display_order: 8 },
+      { parameter_name: 'Serum Globulin', input_type: 'numeric', unit: 'g/dL', reference_text: '2.0 - 3.5', applicable_gender: 'all', display_order: 9 },
+      { parameter_name: 'A/G Ratio', input_type: 'numeric', unit: '', reference_text: '1.2 - 2.2', applicable_gender: 'all', display_order: 10 }
+    ],
+    kft: [
+      { parameter_name: 'Blood Urea', input_type: 'numeric', unit: 'mg/dL', reference_text: '15 - 40', applicable_gender: 'all', display_order: 1 },
+      { parameter_name: 'Serum Creatinine', input_type: 'numeric', unit: 'mg/dL', reference_text: '0.7 - 1.3', applicable_gender: 'male', display_order: 2 },
+      { parameter_name: 'Serum Creatinine', input_type: 'numeric', unit: 'mg/dL', reference_text: '0.5 - 1.1', applicable_gender: 'female', display_order: 3 },
+      { parameter_name: 'Blood Urea Nitrogen (BUN)', input_type: 'numeric', unit: 'mg/dL', reference_text: '7 - 20', applicable_gender: 'all', display_order: 4 },
+      { parameter_name: 'Serum Uric Acid', input_type: 'numeric', unit: 'mg/dL', reference_text: '3.5 - 7.2', applicable_gender: 'male', display_order: 5 },
+      { parameter_name: 'Serum Uric Acid', input_type: 'numeric', unit: 'mg/dL', reference_text: '2.6 - 6.0', applicable_gender: 'female', display_order: 6 },
+      { parameter_name: 'Serum Sodium (Na+)', input_type: 'numeric', unit: 'mEq/L', reference_text: '135 - 145', applicable_gender: 'all', display_order: 7 },
+      { parameter_name: 'Serum Potassium (K+)', input_type: 'numeric', unit: 'mEq/L', reference_text: '3.5 - 5.1', applicable_gender: 'all', display_order: 8 }
+    ],
+    lipid: [
+      { parameter_name: 'Total Cholesterol', input_type: 'numeric', unit: 'mg/dL', reference_text: '< 200', applicable_gender: 'all', display_order: 1 },
+      { parameter_name: 'Serum Triglycerides', input_type: 'numeric', unit: 'mg/dL', reference_text: '< 150', applicable_gender: 'all', display_order: 2 },
+      { parameter_name: 'HDL Cholesterol', input_type: 'numeric', unit: 'mg/dL', reference_text: '> 40', applicable_gender: 'male', display_order: 3 },
+      { parameter_name: 'HDL Cholesterol', input_type: 'numeric', unit: 'mg/dL', reference_text: '> 50', applicable_gender: 'female', display_order: 4 },
+      { parameter_name: 'LDL Cholesterol', input_type: 'numeric', unit: 'mg/dL', reference_text: '< 100', applicable_gender: 'all', display_order: 5 },
+      { parameter_name: 'VLDL Cholesterol', input_type: 'numeric', unit: 'mg/dL', reference_text: '5 - 30', applicable_gender: 'all', display_order: 6 },
+      { parameter_name: 'Total Chol / HDL Ratio', input_type: 'numeric', unit: '', reference_text: '< 5.0', applicable_gender: 'all', display_order: 7 }
+    ],
+    urine: [
+      { parameter_name: 'Colour', input_type: 'dropdown', unit: '', reference_text: 'Pale Yellow,Yellow,Dark Yellow,Amber,Reddish', applicable_gender: 'all', display_order: 1 },
+      { parameter_name: 'Transparency / Appearance', input_type: 'dropdown', unit: '', reference_text: 'Clear,Slightly Hazy,Turbid,Cloudy', applicable_gender: 'all', display_order: 2 },
+      { parameter_name: 'Specific Gravity', input_type: 'numeric', unit: '', reference_text: '1.005 - 1.030', applicable_gender: 'all', display_order: 3 },
+      { parameter_name: 'pH', input_type: 'numeric', unit: '', reference_text: '4.5 - 8.0', applicable_gender: 'all', display_order: 4 },
+      { parameter_name: 'Albumin / Protein', input_type: 'dropdown', unit: '', reference_text: 'Nil / Negative,Trace,1+,2+,3+,4+', applicable_gender: 'all', display_order: 5 },
+      { parameter_name: 'Sugar / Glucose', input_type: 'dropdown', unit: '', reference_text: 'Nil / Negative,Trace,1+,2+,3+,4+', applicable_gender: 'all', display_order: 6 },
+      { parameter_name: 'Ketone Bodies', input_type: 'dropdown', unit: '', reference_text: 'Negative,Trace,Positive', applicable_gender: 'all', display_order: 7 },
+      { parameter_name: 'Bile Salts', input_type: 'dropdown', unit: '', reference_text: 'Negative,Positive', applicable_gender: 'all', display_order: 8 },
+      { parameter_name: 'Bile Pigments', input_type: 'dropdown', unit: '', reference_text: 'Negative,Positive', applicable_gender: 'all', display_order: 9 },
+      { parameter_name: 'Pus Cells (Leukocytes)', input_type: 'numeric', unit: '/HPF', reference_text: '0 - 5', applicable_gender: 'all', display_order: 10 },
+      { parameter_name: 'RBCs (Erythrocytes)', input_type: 'numeric', unit: '/HPF', reference_text: '0 - 2', applicable_gender: 'all', display_order: 11 },
+      { parameter_name: 'Epithelial Cells', input_type: 'text', unit: '/HPF', reference_text: 'Occasional (1 - 3)', applicable_gender: 'all', display_order: 12 },
+      { parameter_name: 'Casts & Crystals', input_type: 'text', unit: '', reference_text: 'Not Seen / Nil', applicable_gender: 'all', display_order: 13 }
+    ],
+    serology: [
+      { parameter_name: 'Test Result / Interpretation', input_type: 'dropdown', unit: '', reference_text: 'Non-Reactive (Negative),Reactive (Positive),Equivocal / Borderline', applicable_gender: 'all', display_order: 1 },
+      { parameter_name: 'Cut-off Index (S/CO)', input_type: 'numeric', unit: '', reference_text: '< 1.0 (Non-Reactive)', applicable_gender: 'all', display_order: 2 }
+    ],
+    imaging: [
+      { parameter_name: 'Clinical Indication', input_type: 'text', unit: '', reference_text: '', applicable_gender: 'all', display_order: 1 },
+      { parameter_name: 'Technique / Modality', input_type: 'text', unit: '', reference_text: 'Digital Radiography / Ultrasound', applicable_gender: 'all', display_order: 2 },
+      { parameter_name: 'Findings / Clinical Observations', input_type: 'multiline', unit: '', reference_text: 'Normal anatomical structures without focal lesion.', applicable_gender: 'all', display_order: 3 },
+      { parameter_name: 'Impression / Conclusion', input_type: 'multiline', unit: '', reference_text: 'No significant abnormal findings detected.', applicable_gender: 'all', display_order: 4 }
+    ],
+    culture: [
+      { parameter_name: 'Specimen', input_type: 'text', unit: '', reference_text: 'Urine / Blood / Pus / Swab', applicable_gender: 'all', display_order: 1 },
+      { parameter_name: 'Direct Smear Examination', input_type: 'text', unit: '', reference_text: 'Pus cells seen / No organisms', applicable_gender: 'all', display_order: 2 },
+      { parameter_name: 'Colony Count', input_type: 'text', unit: 'CFU/mL', reference_text: '< 10,000 CFU/mL', applicable_gender: 'all', display_order: 3 },
+      { parameter_name: 'Organism Isolated', input_type: 'text', unit: '', reference_text: 'No pathogenic growth after 48h incubation', applicable_gender: 'all', display_order: 4 },
+      { parameter_name: 'Antibiotic Sensitivity & Resistance', input_type: 'multiline', unit: '', reference_text: 'Sensitive: ... | Resistant: ...', applicable_gender: 'all', display_order: 5 }
+    ]
+  };
+
   const table = new DataTable({
     containerId: 'tests-table-container',
     columns: [
-      { key: null,           label: 'S.No.',        width: '60px',  render: (_, __, idx) => `<span class="tabular">${idx}</span>` },
-      { key: 'test_code',    label: 'Test ID',      width: '110px', render: v => v ? `<span class="tabular fw-600 text-primary">${escapeHtml(v)}</span>` : '—' },
-      { key: 'name',         label: 'Test Name',    render: v => `<span class="fw-600">${escapeHtml(v)}</span>` },
-      { key: 'description',  label: 'Description',  render: v => escapeHtml(v || '—') },
-      { key: 'price',        label: 'Price',        width: '100px', render: v => `<span class="tabular fw-600">${formatCurrency(v)}</span>` },
-      { key: 'is_active',    label: 'Status',       width: '90px',  render: v => v ? `<span class="badge badge-success">Active</span>` : `<span class="badge badge-neutral">Inactive</span>` },
-      { key: null,           label: 'Actions',      width: '280px', render: (_, row) => `
+      { key: null,           label: 'S.No.',        width: '55px',  render: (_, __, idx) => `<span class="tabular">${idx}</span>` },
+      { key: 'test_code',    label: 'Test ID',      width: '100px', render: v => v ? `<span class="tabular fw-600 text-primary">${escapeHtml(v)}</span>` : '—' },
+      { key: 'name',         label: 'Test Name & Department', render: (v, row) => `
+        <div>
+          <span class="fw-600" style="color:var(--color-ink)">${escapeHtml(v)}</span>
+          ${row.category ? `<div style="font-size:11px;color:var(--color-ink-muted)">${escapeHtml(row.category)}</div>` : ''}
+        </div>
+      ` },
+      { key: 'price',        label: 'Price',        width: '95px', render: v => `<span class="tabular fw-600">${formatCurrency(v)}</span>` },
+      { key: 'parameters_count', label: 'Report Format', width: '135px', render: (v, row) => {
+        const count = v || 0;
+        if (count > 0) {
+          return `<button class="btn btn-xs" style="background:rgba(39,174,96,0.12);color:#27ae60;border:1px solid rgba(39,174,96,0.3);font-weight:600;border-radius:12px;padding:3px 9px" onclick="openManageParameters('${row.id}','${escapeHtml(row.name)}')">✓ ${count} Param${count > 1 ? 's' : ''}</button>`;
+        } else {
+          return `<button class="btn btn-xs" style="background:rgba(230,126,34,0.12);color:#e67e22;border:1px solid rgba(230,126,34,0.35);font-weight:600;border-radius:12px;padding:3px 9px" onclick="openManageParameters('${row.id}','${escapeHtml(row.name)}')">+ Set Format</button>`;
+        }
+      }},
+      { key: 'is_active',    label: 'Status',       width: '85px',  render: v => v ? `<span class="badge badge-success">Active</span>` : `<span class="badge badge-neutral">Inactive</span>` },
+      { key: null,           label: 'Actions',      width: '240px', render: (_, row) => `
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-secondary" onclick="openManageParameters('${row.id}', '${escapeHtml(row.name)}')">Parameters</button>
-          <button class="btn btn-sm btn-ghost" onclick="openEdit('${row.id}')">Price</button>
+          <button class="btn btn-sm btn-ghost" onclick="openEdit('${row.id}')">Edit</button>
           <button class="btn btn-sm btn-ghost" onclick="showPriceHistory('${row.id}','${escapeHtml(row.name)}')">History</button>
           ${row.is_active ? `<button class="btn btn-sm btn-danger" onclick="softDelete('${row.id}','${escapeHtml(row.name)}')">Remove</button>` : ''}
         </div>
@@ -208,45 +353,64 @@
 
   document.getElementById('add-test-btn').addEventListener('click', () => {
     editingId = null;
-    document.getElementById('test-modal-title').textContent = 'Add Test';
+    document.getElementById('test-modal-title').textContent = 'Add Test to Catalog';
     document.getElementById('test-form').reset();
     document.getElementById('test-id').value = '';
     document.getElementById('test-code-row').style.display = 'none';
+    document.getElementById('test-preset-row').style.display = '';
+    document.getElementById('test-open-params-wrap').style.display = 'flex';
+    document.getElementById('test-open-params-chk').checked = true;
     Modal.open('test-modal');
   });
 
   window.openEdit = async function(id) {
     editingId = id;
-    document.getElementById('test-modal-title').textContent = 'Edit Test Price';
+    document.getElementById('test-modal-title').textContent = 'Edit Test Details';
     document.getElementById('test-code-row').style.display = '';
+    document.getElementById('test-preset-row').style.display = 'none';
+    document.getElementById('test-open-params-wrap').style.display = 'none';
     Modal.open('test-modal');
     try {
       const t = await API.get(`/api/v1/tests/${id}`);
-      document.getElementById('test-name').value  = t.name || '';
-      document.getElementById('test-price').value = t.price || '';
-      document.getElementById('test-desc').value  = t.description || '';
+      document.getElementById('test-name').value     = t.name || '';
+      document.getElementById('test-price').value    = t.price || '';
+      document.getElementById('test-category').value = t.category || 'General';
+      document.getElementById('test-desc').value     = t.description || '';
       document.getElementById('test-code-val').value = t.test_code || '—';
     } catch { Toast.show('Failed to load test', 'error'); Modal.close('test-modal'); }
   };
 
   document.getElementById('test-save-btn').addEventListener('click', async () => {
-    const name  = document.getElementById('test-name').value.trim();
-    const price = parseFloat(document.getElementById('test-price').value);
-    const desc  = document.getElementById('test-desc').value.trim();
-    if (!name || isNaN(price) || price < 1) { Toast.show('Enter a valid name and price', 'warning'); return; }
+    const name     = document.getElementById('test-name').value.trim();
+    const price    = parseFloat(document.getElementById('test-price').value);
+    const category = document.getElementById('test-category').value;
+    const desc     = document.getElementById('test-desc').value.trim();
+    const preset   = document.getElementById('test-preset').value;
+    const openParams = document.getElementById('test-open-params-chk').checked;
+
+    if (!name || isNaN(price) || price < 0) { Toast.show('Enter a valid name and price', 'warning'); return; }
 
     const btn = document.getElementById('test-save-btn');
     btn.setAttribute('aria-busy','true'); btn.innerHTML = `<span class="btn-loading-spinner"></span> Saving...`;
     try {
       if (editingId) {
-        await API.patch(`/api/v1/tests/${editingId}`, { name, price, description: desc });
-        Toast.show('Test updated. Price history recorded.', 'success');
+        await API.patch(`/api/v1/tests/${editingId}`, { name, price, category, description: desc });
+        Toast.show('Test updated successfully', 'success');
+        Modal.close('test-modal');
+        table.refresh();
       } else {
-        await API.post('/api/v1/tests', { name, price, description: desc });
+        const created = await API.post('/api/v1/tests', { name, price, category, description: desc });
         Toast.show('Test added to catalog', 'success');
+        Modal.close('test-modal');
+        table.refresh();
+
+        if (openParams && created && created.id) {
+          // Open parameter configuration immediately
+          setTimeout(() => {
+            openManageParameters(created.id, created.name, preset);
+          }, 200);
+        }
       }
-      Modal.close('test-modal');
-      table.refresh();
     } catch (err) { Toast.show(err.message || 'Failed to save', 'error'); }
     finally { btn.removeAttribute('aria-busy'); btn.innerHTML = 'Save Test'; }
   });
@@ -292,9 +456,9 @@
 
   let currentParamTestId = null;
 
-  window.openManageParameters = async function(testId, testName) {
+  window.openManageParameters = async function(testId, testName, initialPreset = null) {
     currentParamTestId = testId;
-    document.getElementById('params-modal-title').textContent = `Manage Parameters — ${testName}`;
+    document.getElementById('params-modal-title').textContent = `Report Format & Parameters — ${testName}`;
     const tbody = document.getElementById('parameters-table-body');
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px"><div class="skel" style="height:30px;width:100%"></div></td></tr>`;
     Modal.open('parameters-modal');
@@ -302,17 +466,30 @@
     try {
       const res = await API.get(`/api/v1/tests/${testId}/parameters`);
       tbody.innerHTML = '';
-      const params = res.parameters || [];
+      const params = Array.isArray(res) ? res : (res.parameters || []);
       if (params.length === 0) {
-        addParameterRow({ display_order: 1 });
+        if (initialPreset && initialPreset !== 'none' && PRESETS_LIBRARY[initialPreset]) {
+          applyParameterPreset(initialPreset);
+        } else {
+          addParameterRow({ display_order: 1 });
+        }
       } else {
         params.forEach(p => addParameterRow(p));
       }
     } catch (e) {
       tbody.innerHTML = '';
       Toast.show('Failed to load test parameters', 'error');
-      addParameterRow({ display_order: 1 });
+      if (initialPreset && initialPreset !== 'none' && PRESETS_LIBRARY[initialPreset]) {
+        applyParameterPreset(initialPreset);
+      } else {
+        addParameterRow({ display_order: 1 });
+      }
     }
+  };
+
+  window.clearParameterRows = function() {
+    document.getElementById('parameters-table-body').innerHTML = '';
+    addParameterRow({ display_order: 1 });
   };
 
   window.addParameterRow = function(p = {}) {
@@ -320,36 +497,43 @@
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid var(--color-border)';
     const orderNum = p.display_order || (tbody.children.length + 1);
-    const inputType = p.input_type || 'numeric';
-    const gender = p.gender || 'both';
+    const inputType = (p.input_type || 'numeric').toLowerCase();
+    const gender = (p.applicable_gender || p.gender || 'all').toLowerCase();
+
+    let refVal = p.reference_text || '';
+    if (!refVal && p.reference_low !== null && p.reference_low !== undefined && p.reference_high !== null && p.reference_high !== undefined) {
+      refVal = `${p.reference_low} - ${p.reference_high}`;
+    } else if (!refVal && Array.isArray(p.dropdown_options) && p.dropdown_options.length > 0) {
+      refVal = p.dropdown_options.join(', ');
+    }
 
     tr.innerHTML = `
       <td style="padding:6px 4px">
-        <input type="text" class="form-input param-name" style="padding:4px 8px;font-size:12px" placeholder="e.g. Hemoglobin" value="${escapeHtml(p.parameter_name || '')}" required>
+        <input type="text" class="form-input param-name" style="padding:4px 8px;font-size:12px;width:100%" placeholder="e.g. Hemoglobin / Findings" value="${escapeHtml(p.parameter_name || '')}" required>
       </td>
       <td style="padding:6px 4px">
-        <select class="form-select param-type" style="padding:4px 8px;font-size:12px">
-          <option value="numeric" ${inputType === 'numeric' ? 'selected' : ''}>Numeric</option>
-          <option value="text" ${inputType === 'text' ? 'selected' : ''}>Text / Short</option>
+        <select class="form-select param-type" style="padding:4px 8px;font-size:12px;width:100%">
+          <option value="numeric" ${inputType === 'numeric' ? 'selected' : ''}>Numeric (Value + Range)</option>
+          <option value="text" ${inputType === 'text' ? 'selected' : ''}>Text (Short remark)</option>
           <option value="multiline" ${inputType === 'multiline' ? 'selected' : ''}>Multiline / Descriptive</option>
-          <option value="select" ${inputType === 'select' ? 'selected' : ''}>Dropdown Select</option>
+          <option value="dropdown" ${inputType === 'dropdown' || inputType === 'select' ? 'selected' : ''}>Dropdown Select</option>
         </select>
       </td>
       <td style="padding:6px 4px">
-        <input type="text" class="form-input param-unit" style="padding:4px 8px;font-size:12px" placeholder="e.g. g/dL" value="${escapeHtml(p.unit || '')}">
+        <input type="text" class="form-input param-unit" style="padding:4px 8px;font-size:12px;width:100%" placeholder="e.g. g/dL, mg/dL" value="${escapeHtml(p.unit || '')}">
       </td>
       <td style="padding:6px 4px">
-        <input type="text" class="form-input param-ref" style="padding:4px 8px;font-size:12px" placeholder="e.g. 11.5 - 16.5 or Pos,Neg" value="${escapeHtml(p.reference_text || (p.reference_low && p.reference_high ? p.reference_low + ' - ' + p.reference_high : ''))}">
+        <input type="text" class="form-input param-ref" style="padding:4px 8px;font-size:12px;width:100%" placeholder="e.g. 11.5 - 16.5 or Pos,Neg" value="${escapeHtml(refVal)}">
       </td>
       <td style="padding:6px 4px">
-        <select class="form-select param-gender" style="padding:4px 8px;font-size:12px">
-          <option value="both" ${gender === 'both' ? 'selected' : ''}>Both</option>
+        <select class="form-select param-gender" style="padding:4px 8px;font-size:12px;width:100%">
+          <option value="all" ${gender === 'all' || gender === 'both' ? 'selected' : ''}>All / Both</option>
           <option value="male" ${gender === 'male' ? 'selected' : ''}>Male</option>
           <option value="female" ${gender === 'female' ? 'selected' : ''}>Female</option>
         </select>
       </td>
       <td style="padding:6px 4px;text-align:center">
-        <input type="number" class="form-input param-order" style="padding:4px;font-size:12px;text-align:center;width:50px" value="${orderNum}">
+        <input type="number" class="form-input param-order" style="padding:4px;font-size:12px;text-align:center;width:45px" value="${orderNum}">
       </td>
       <td style="padding:6px 4px;text-align:center">
         <button type="button" class="btn btn-xs btn-ghost text-danger" onclick="this.closest('tr').remove()" title="Remove row">✕</button>
@@ -360,18 +544,22 @@
 
   window.applyParameterPreset = function(preset) {
     const tbody = document.getElementById('parameters-table-body');
-    if (preset === 'numeric_basic') {
-      addParameterRow({ parameter_name: 'Measured Value', input_type: 'numeric', display_order: tbody.children.length + 1 });
-    } else if (preset === 'imaging') {
-      addParameterRow({ parameter_name: 'Findings / Clinical Observations', input_type: 'multiline', display_order: tbody.children.length + 1 });
-      addParameterRow({ parameter_name: 'Impression / Conclusion', input_type: 'multiline', display_order: tbody.children.length + 2 });
-    } else if (preset === 'serology') {
-      addParameterRow({ parameter_name: 'Result / Interpretation', input_type: 'select', reference_text: 'Negative,Positive,Equivocal', display_order: tbody.children.length + 1 });
+    const items = PRESETS_LIBRARY[preset];
+    if (!items || !items.length) return;
+
+    // If only one blank row exists, clear it first
+    const rows = tbody.querySelectorAll('tr');
+    if (rows.length === 1 && !rows[0].querySelector('.param-name').value.trim()) {
+      tbody.innerHTML = '';
     }
+
+    items.forEach(item => {
+      addParameterRow(item);
+    });
   };
 
   window.seedStandardParameters = async function() {
-    if (!confirm("This will auto-populate parameters and reference ranges for all 65 standard Indian test catalogs if they don't have parameters yet. Continue?")) return;
+    if (!confirm("This will auto-populate parameters and reference ranges for all standard tests in the catalog. Continue?")) return;
     try {
       const btn = document.querySelector('button[onclick="seedStandardParameters()"]');
       if (btn) btn.disabled = true;
@@ -382,7 +570,7 @@
         const testRow = table.data.find(t => t.id === currentParamTestId);
         if (testRow) openManageParameters(currentParamTestId, testRow.name);
       }
-      table.load();
+      table.refresh();
     } catch (e) {
       Toast.show('Failed to auto-seed standard catalog: ' + (e.message || e), 'error');
     } finally {
@@ -395,12 +583,17 @@
     if (!currentParamTestId) return;
     const tbody = document.getElementById('parameters-table-body');
     const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length === 0) {
+      Toast.show('Please add at least one parameter row or cancel.', 'warning');
+      return;
+    }
     const parameters = [];
 
-    for (const tr of rows) {
+    for (let i = 0; i < rows.length; i++) {
+      const tr = rows[i];
       const name = tr.querySelector('.param-name').value.trim();
       if (!name) {
-        Toast.show('Parameter Name is required for all rows.', 'error');
+        Toast.show(`Parameter Name is required for row #${i + 1}`, 'error');
         tr.querySelector('.param-name').focus();
         return;
       }
@@ -408,29 +601,29 @@
       const unit = tr.querySelector('.param-unit').value.trim();
       const ref = tr.querySelector('.param-ref').value.trim();
       const gender = tr.querySelector('.param-gender').value;
-      const order = parseInt(tr.querySelector('.param-order').value, 10) || 1;
+      const order = parseInt(tr.querySelector('.param-order').value, 10) || (i + 1);
 
       parameters.push({
         parameter_name: name,
         input_type: type,
         unit: unit || null,
         reference_text: ref || null,
-        gender: gender,
+        applicable_gender: gender,
         display_order: order
       });
     }
 
+    const saveBtn = document.getElementById('save-parameters-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
     try {
-      const saveBtn = document.getElementById('save-parameters-btn');
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
       await API.post(`/api/v1/tests/${currentParamTestId}/parameters`, { parameters });
-      Toast.show('Test parameters saved successfully!', 'success');
+      Toast.show('Report format & parameters saved successfully!', 'success');
       Modal.close('parameters-modal');
+      table.refresh();
     } catch (e) {
       Toast.show('Failed to save parameters: ' + (e.message || e), 'error');
     } finally {
-      const saveBtn = document.getElementById('save-parameters-btn');
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Parameters';
     }

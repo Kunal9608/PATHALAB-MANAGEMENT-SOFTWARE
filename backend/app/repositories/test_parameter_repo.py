@@ -37,12 +37,18 @@ def replace_for_test(db: Session, test_id: uuid.UUID, parameters_data: List[Test
                 except ValueError:
                     pass
 
+        dropdown_opts = item.dropdown_options
+        if item.input_type == "dropdown" and not dropdown_opts and item.reference_text:
+            if "," in item.reference_text or "/" in item.reference_text:
+                delim = "," if "," in item.reference_text else "/"
+                dropdown_opts = [opt.strip() for opt in item.reference_text.split(delim) if opt.strip()]
+
         p = TestParameter(
             test_id=test_id,
             parameter_name=item.parameter_name,
             unit=item.unit,
             input_type=item.input_type,
-            dropdown_options=item.dropdown_options,
+            dropdown_options=dropdown_opts,
             reference_low=ref_low,
             reference_high=ref_high,
             reference_text=item.reference_text,

@@ -1,9 +1,33 @@
 """Patient schemas — comprehensive validation per SRS §5.4."""
-from pydantic import BaseModel, field_validator, model_validator
-from typing import Optional, List
-from datetime import date, datetime
+import math
 import re
 import uuid
+from datetime import date, datetime
+from typing import Optional, List
+from pydantic import BaseModel, field_validator, model_validator
+
+
+VALID_GENDERS = ("male", "female", "trans")
+VALID_COLLECTIONS = ("self_center", "courier_serum", "courier_redcliffe")
+VALID_PAYMENT_MODES = ("cash", "qr")
+VALID_PATIENT_STATUSES = (
+    "sample_collected",
+    "sent_to_franchise",
+    "under_process",
+    "partial_release",
+    "report_ready",
+)
+
+
+def _check_finite_amount(val: Optional[float], field_name: str) -> Optional[float]:
+    """Validates that a financial amount is not NaN, Inf, or negative."""
+    if val is None:
+        return None
+    if not isinstance(val, (int, float)) or math.isnan(val) or math.isinf(val):
+        raise ValueError(f"{field_name} must be a valid finite number")
+    if val < 0:
+        raise ValueError(f"{field_name} cannot be negative")
+    return float(val)
 
 
 class PatientCreate(BaseModel):
@@ -24,7 +48,7 @@ class PatientCreate(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, v):
-        if not (2 <= len(v.strip()) <= 120):
+        if not v or not (2 <= len(v.strip()) <= 120):
             raise ValueError("Name must be 2–120 characters")
         return v.strip()
 
@@ -38,44 +62,49 @@ class PatientCreate(BaseModel):
     @field_validator("gender")
     @classmethod
     def validate_gender(cls, v):
-        if v not in ("male", "female", "trans"):
-            raise ValueError("Gender must be male, female, or trans")
+        if v not in VALID_GENDERS:
+            raise ValueError(f"Gender must be one of {VALID_GENDERS}")
         return v
 
     @field_validator("mobile")
     @classmethod
     def validate_mobile(cls, v):
-        if not re.match(r"^[6-9]\d{9}$", v):
+        if not v or not re.match(r"^[6-9]\d{9}$", v):
             raise ValueError("Must be a valid 10-digit Indian mobile number")
         return v
 
     @field_validator("test_ids")
     @classmethod
     def validate_tests(cls, v):
-        if len(v) == 0:
+        if not v or len(v) == 0:
             raise ValueError("At least one test must be selected")
         return v
 
     @field_validator("collection_type")
     @classmethod
     def validate_collection_type(cls, v):
-        valid = ("self_center", "courier_serum", "courier_redcliffe")
-        if v not in valid:
-            raise ValueError(f"collection_type must be one of {valid}")
+        if v not in VALID_COLLECTIONS:
+            raise ValueError(f"collection_type must be one of {VALID_COLLECTIONS}")
         return v
 
+    @field_validator("amount_paid")
+    @classmethod
+    def validate_amount_paid(cls, v):
+        return _check_finite_amount(v, "amount_paid")
+
+    @field_validator("discount_amount")
+    @classmethod
+    def validate_discount_amount(cls, v):
+        return _check_finite_amount(v, "discount_amount")
+
     @model_validator(mode="after")
-    def validate_payment_mode(self):
-        if self.amount_paid < 0:
-            raise ValueError("amount_paid cannot be negative")
-        if self.discount_amount < 0:
-            raise ValueError("discount_amount cannot be negative")
+    def validate_payment_and_dates(self):
         if self.amount_paid > 0 and not self.payment_mode:
             raise ValueError("payment_mode is required when amount is paid")
         if self.amount_paid == 0:
             self.payment_mode = None
-        if self.payment_mode and self.payment_mode not in ("cash", "qr"):
-            raise ValueError("payment_mode must be cash or qr")
+        if self.payment_mode and self.payment_mode not in VALID_PAYMENT_MODES:
+            raise ValueError(f"payment_mode must be one of {VALID_PAYMENT_MODES}")
         sample = self.sample_date or date.today()
         if self.estimated_report_date and self.estimated_report_date < sample:
             raise ValueError("estimated_report_date must be >= sample_date")
@@ -107,6 +136,83 @@ class PatientUpdate(BaseModel):
     courier_name: Optional[str] = None
     tracking_id: Optional[str] = None
     franchise_remarks: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        if v is not None:
+            if not (2 <= len(v.strip()) <= 120):
+                raise ValueError("Name must be 2–120 characters")
+            return v.strip()
+        return v
+
+    @field_validator("age")
+    @classmethod
+    def validate_age(cls, v):
+        if v is not None and not (1 <= v <= 129):
+            raise ValueError("Age must be between 1 and 129")
+        return v
+
+    @field_validator("gender")
+    @classmethod
+    def validate_gender(cls, v):
+        if v is not None and v not in VALID_GENDERS:
+            raise ValueError(f"Gender must be one of {VALID_GENDERS}")
+        return v
+
+    @field_validator("mobile")
+    @classmethod
+    def validate_mobile(cls, v):
+        if v is not None and not re.match(r"^[6-9]\d{9}$", v):
+            raise ValueError("Must be a valid 10-digit Indian mobile number")
+        return v
+
+    @field_validator("test_ids")
+    @classmethod
+    def validate_tests(cls, v):
+        if v is not None and len(v) == 0:
+            raise ValueError("test_ids cannot be empty if provided")
+        return v
+
+    @field_validator("collection_type")
+    @classmethod
+    def validate_collection_type(cls, v):
+        if v is not None and v not in VALID_COLLECTIONS:
+            raise ValueError(f"collection_type must be one of {VALID_COLLECTIONS}")
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v):
+        if v is not None and v not in VALID_PATIENT_STATUSES:
+            raise ValueError(f"status must be one of {VALID_PATIENT_STATUSES}")
+        return v
+
+    @field_validator("payment_mode")
+    @classmethod
+    def validate_payment_mode(cls, v):
+        if v is not None and v not in VALID_PAYMENT_MODES:
+            raise ValueError(f"payment_mode must be one of {VALID_PAYMENT_MODES}")
+        return v
+
+    @field_validator("amount_paid")
+    @classmethod
+    def validate_amount_paid(cls, v):
+        return _check_finite_amount(v, "amount_paid")
+
+    @field_validator("discount_amount")
+    @classmethod
+    def validate_discount_amount(cls, v):
+        return _check_finite_amount(v, "discount_amount")
+
+    @model_validator(mode="after")
+    def validate_payment_and_dates(self):
+        if self.amount_paid is not None and self.amount_paid > 0 and not self.payment_mode:
+            raise ValueError("payment_mode is required when amount is paid")
+        if self.sample_date and self.estimated_report_date:
+            if self.estimated_report_date < self.sample_date:
+                raise ValueError("estimated_report_date must be >= sample_date")
+        return self
 
 
 class TestSummary(BaseModel):

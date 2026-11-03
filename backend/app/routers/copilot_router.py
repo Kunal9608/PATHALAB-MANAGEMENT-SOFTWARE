@@ -25,8 +25,48 @@ class ChatRequest(BaseModel):
     message: str
     history: Optional[list] = []
 
-# In-memory store for rate limiting: { "user_id": [datetime1, datetime2] }
+# Rate limiting store: Redis distributed first with in-memory fallback
 user_chat_timestamps = {}
+
+def check_copilot_rate_limit(user_id: str, limit: int, window_seconds: int = 60) -> bool:
+    """
+    Check and increment rate limit for a user.
+    Uses Redis for distributed multi-worker consistency; falls back to in-memory sliding window.
+    Returns True if allowed, False if exceeded.
+    """
+    global user_chat_timestamps
+    try:
+        from backend.app.core.redis_client import get_redis
+        r = get_redis()
+        if r:
+            key = f"copilot:ratelimit:{user_id}"
+            pipe = r.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, window_seconds, nx=True)
+            results = pipe.execute()
+            current_count = results[0]
+            return current_count <= limit
+    except Exception as e:
+        logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
+
+    # Resilient in-memory fallback for local development or when Redis is disabled
+    now = datetime.now()
+    if len(user_chat_timestamps) > 500:
+        cutoff = now.timestamp() - 3600
+        user_chat_timestamps = {
+            uid: [t for t in ts if t.timestamp() > cutoff]
+            for uid, ts in user_chat_timestamps.items()
+            if any(t.timestamp() > cutoff for t in ts)
+        }
+
+    history = user_chat_timestamps.get(user_id, [])
+    history = [t for t in history if (now - t).total_seconds() < window_seconds]
+    if len(history) >= limit:
+        return False
+
+    history.append(now)
+    user_chat_timestamps[user_id] = history
+    return True
 
 
 def _save_copilot_message(db: Session, user_id, role: str, content: str):
@@ -74,28 +114,12 @@ async def chat_with_copilot(
     staff_limit = getattr(settings, 'COPILOT_LIMIT_STAFF', 5)
     limit = admin_limit if role_str.lower() == "admin" else staff_limit
     user_id = str(current_user.id)
-    now = datetime.now()
 
-    # Clean up old inactive users from memory dictionary periodically to prevent memory leaks
-    if len(user_chat_timestamps) > 500:
-        cutoff = now.timestamp() - 3600
-        user_chat_timestamps = {
-            uid: [t for t in ts if t.timestamp() > cutoff]
-            for uid, ts in user_chat_timestamps.items()
-            if any(t.timestamp() > cutoff for t in ts)
-        }
-
-    history = user_chat_timestamps.get(user_id, [])
-    history = [t for t in history if (now - t).total_seconds() < 60]
-
-    if len(history) >= limit:
+    if not check_copilot_rate_limit(user_id, limit, window_seconds=60):
         async def rate_limit_stream():
             yield f"data: {json.dumps(f'Rate Limit Reached: You can send a maximum of {limit} messages per minute ({role_str.capitalize()} limit: {limit}/min). Please wait a moment before sending another message.')}\n\n"
             yield "data: [DONE]\n\n"
         return StreamingResponse(rate_limit_stream(), media_type="text/event-stream")
-
-    history.append(now)
-    user_chat_timestamps[user_id] = history
     # --------------------------------
 
     # Step 1: Deterministic Backend Retrieval with Redis-first Cache-Aside & Conversation Memory

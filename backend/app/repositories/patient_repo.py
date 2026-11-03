@@ -67,7 +67,7 @@ def list_patients(
     )
 
     # 2. Base query for count (NO joinedload to prevent expensive joins)
-    count_query = db.query(Patient).filter(Patient.deleted_at.is_(None))
+    count_query = db.query(func.count(Patient.id)).filter(Patient.deleted_at.is_(None))
 
     if q:
         # Use prefix search if exact code/phone/name or wildcard
@@ -102,10 +102,8 @@ def list_patients(
         query = query.filter(Patient.collected_by == collected_by)
         count_query = count_query.filter(Patient.collected_by == collected_by)
 
-    # High-scale performance optimization: bounded subquery count prevents 5-30s table scans on 50M+ rows
-    bound_limit = max(10001, (page + 10) * page_size)
-    bounded_subquery = count_query.limit(bound_limit).subquery()
-    total = db.query(func.count()).select_from(bounded_subquery).scalar() or 0
+    # Accurate total count directly using indexed Patient.id count query without artificial truncation
+    total = count_query.scalar() or 0
     items = (
         query.order_by(desc(Patient.created_at))
         .offset((page - 1) * page_size)

@@ -3,9 +3,12 @@ FastAPI application — wires all routers, middleware, static file serving.
 This file does NOT contain business logic — only app assembly.
 """
 import os
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Optional
+
+logger = logging.getLogger("app")
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse

@@ -94,7 +94,7 @@ def upgrade() -> None:
                     ) THEN
                         CREATE POLICY "{policy_name}" ON public.{tbl}
                             FOR ALL 
-                            TO postgres, service_role 
+                            TO PUBLIC 
                             USING (true) 
                             WITH CHECK (true);
                     END IF;

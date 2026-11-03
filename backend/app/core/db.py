@@ -15,6 +15,24 @@ class Base(DeclarativeBase):
     pass
 
 
+# Dialect compatibility: Enable SQLite compilation for PostgreSQL-specific column types (used in tests/migrations)
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.dialects.postgresql import BYTEA, INET, JSONB
+
+@compiles(BYTEA, "sqlite")
+def _compile_bytea_sqlite(type_, compiler, **kw):
+    return "BLOB"
+
+@compiles(INET, "sqlite")
+def _compile_inet_sqlite(type_, compiler, **kw):
+    return "VARCHAR(45)"
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(type_, compiler, **kw):
+    return "JSON"
+
+
+
 import time
 import logging
 
@@ -28,18 +46,15 @@ engine_kwargs = {
 }
 
 if not is_sqlite:
-    is_supabase_session_pooler = "pooler.supabase.com" in settings.DATABASE_URL and ":6543" not in settings.DATABASE_URL
-    if is_supabase_session_pooler:
-        # Supabase pooler on port 5432 enforces strict upstream limit of 15 clients per pool.
-        # Keeping local pool at 10+3=13 connections ensures requests queue in memory
-        # rather than being terminated by upstream FATAL EMAXCONNSESSION.
-        p_size = int(os.getenv("DB_POOL_SIZE", "10"))
+    is_aiven = "aivencloud.com" in settings.DATABASE_URL
+    if is_aiven:
+        # Aiven PostgreSQL base tier enforces an upstream connection limit of 15 clients.
+        # Keeping local pool at 5 base + 3 overflow = 8 max connections per worker ensures
+        # multi-worker deployments stay safely within the 15 connection budget with ample headroom.
+        p_size = int(os.getenv("DB_POOL_SIZE", "5"))
         p_overflow = int(os.getenv("DB_MAX_OVERFLOW", "3"))
-        p_timeout = int(os.getenv("DB_POOL_TIMEOUT", "60"))
+        p_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
     else:
-        # Verified PostgreSQL max_connections is 60.
-        # Across 2 workers (or replicas), 10 base + 5 overflow = 15 max per worker (30 total),
-        # leaving 30 connections of headroom for Supabase internal services and superuser access.
         p_size = int(os.getenv("DB_POOL_SIZE", "10"))
         p_overflow = int(os.getenv("DB_MAX_OVERFLOW", "5"))
         p_timeout = int(os.getenv("DB_POOL_TIMEOUT", "45"))

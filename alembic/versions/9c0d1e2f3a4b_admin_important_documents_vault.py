@@ -21,46 +21,56 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'admin_vault_items',
-        sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
-        sa.Column('admin_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('item_type', sa.String(length=20), server_default='document', nullable=False),
-        sa.Column('category', sa.String(length=50), server_default='general', nullable=False),
-        sa.Column('title_encrypted', sa.Text(), nullable=False),
-        sa.Column('title_hint', sa.String(length=100), nullable=True),
-        sa.Column('storage_path', sa.String(length=255), nullable=True),
-        sa.Column('content_encrypted', sa.Text(), nullable=True),
-        sa.Column('file_size_bytes', sa.Integer(), nullable=True),
-        sa.Column('mime_type', sa.String(length=100), nullable=True),
-        sa.Column('encryption_metadata', sa.JSON(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['admin_id'], ['users.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_admin_vault_items_admin_id'), 'admin_vault_items', ['admin_id'], unique=False)
-    op.create_index(op.f('ix_admin_vault_items_category'), 'admin_vault_items', ['category'], unique=False)
-    op.create_index(op.f('ix_admin_vault_items_item_type'), 'admin_vault_items', ['item_type'], unique=False)
+    conn = op.get_bind()
+    is_pg = conn.dialect.name == "postgresql"
+    inspector = sa.inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+
+    if 'admin_vault_items' not in existing_tables:
+        op.create_table(
+            'admin_vault_items',
+            sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
+            sa.Column('admin_id', postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column('item_type', sa.String(length=20), server_default='document', nullable=False),
+            sa.Column('category', sa.String(length=50), server_default='general', nullable=False),
+            sa.Column('title_encrypted', sa.Text(), nullable=False),
+            sa.Column('title_hint', sa.String(length=100), nullable=True),
+            sa.Column('storage_path', sa.String(length=255), nullable=True),
+            sa.Column('content_encrypted', sa.Text(), nullable=True),
+            sa.Column('file_size_bytes', sa.Integer(), nullable=True),
+            sa.Column('mime_type', sa.String(length=100), nullable=True),
+            sa.Column('encryption_metadata', sa.JSON(), nullable=False),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.ForeignKeyConstraint(['admin_id'], ['users.id'], ondelete='CASCADE'),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_admin_vault_items_admin_id'), 'admin_vault_items', ['admin_id'], unique=False, if_not_exists=True)
+        op.create_index(op.f('ix_admin_vault_items_category'), 'admin_vault_items', ['category'], unique=False, if_not_exists=True)
+        op.create_index(op.f('ix_admin_vault_items_item_type'), 'admin_vault_items', ['item_type'], unique=False, if_not_exists=True)
 
     # Enable Row-Level Security (RLS) on admin_vault_items table
-    op.execute("ALTER TABLE public.admin_vault_items ENABLE ROW LEVEL SECURITY;")
-    op.execute("""
-        CREATE POLICY admin_vault_items_isolation_policy ON public.admin_vault_items
-            FOR ALL
-            USING (
-                admin_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-                OR current_user IN ('postgres', 'service_role')
-            )
-            WITH CHECK (
-                admin_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-                OR current_user IN ('postgres', 'service_role')
-            );
-    """)
+    if is_pg:
+        op.execute("ALTER TABLE public.admin_vault_items ENABLE ROW LEVEL SECURITY;")
+        op.execute("""
+            CREATE POLICY admin_vault_items_isolation_policy ON public.admin_vault_items
+                FOR ALL
+                USING (
+                    admin_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                    OR current_user IN ('postgres', 'service_role', 'avnadmin')
+                )
+                WITH CHECK (
+                    admin_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                    OR current_user IN ('postgres', 'service_role', 'avnadmin')
+                );
+        """)
 
 
 def downgrade() -> None:
-    op.execute("DROP POLICY IF EXISTS admin_vault_items_isolation_policy ON public.admin_vault_items;")
+    conn = op.get_bind()
+    is_pg = conn.dialect.name == "postgresql"
+    if is_pg:
+        op.execute("DROP POLICY IF EXISTS admin_vault_items_isolation_policy ON public.admin_vault_items;")
     op.drop_index(op.f('ix_admin_vault_items_item_type'), table_name='admin_vault_items')
     op.drop_index(op.f('ix_admin_vault_items_category'), table_name='admin_vault_items')
     op.drop_index(op.f('ix_admin_vault_items_admin_id'), table_name='admin_vault_items')

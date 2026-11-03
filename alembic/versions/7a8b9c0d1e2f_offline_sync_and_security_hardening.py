@@ -45,38 +45,41 @@ PUBLIC_TABLES = [
 def upgrade() -> None:
     conn = op.get_bind()
     is_pg = conn.dialect.name == "postgresql"
+    inspector = sa.inspect(conn)
+    existing_tables = set(inspector.get_table_names())
 
     # 1. Create durable offline registration queue table
-    op.create_table(
-        'cached_patient_registrations',
-        sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
-        sa.Column('temp_ref_id', sa.String(length=64), nullable=False),
-        sa.Column('idempotency_key', sa.String(length=255), nullable=False),
-        sa.Column('owner_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('owner_role', sa.String(length=20), nullable=False),
-        sa.Column('patient_data', sa.JSON(), nullable=False),
-        sa.Column('status', sa.String(length=20), server_default='PENDING', nullable=False),
-        sa.Column('failure_reason', sa.Text(), nullable=True),
-        sa.Column('error_details', sa.Text(), nullable=True),
-        sa.Column('retry_count', sa.Integer(), server_default='0', nullable=False),
-        sa.Column('last_attempt_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('synced_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('permanent_patient_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('permanent_patient_code', sa.String(length=32), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['permanent_patient_id'], ['patients.id'], ondelete='SET NULL'),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_cached_patient_registrations_idempotency_key'), 'cached_patient_registrations', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_cached_patient_registrations_owner_id'), 'cached_patient_registrations', ['owner_id'], unique=False)
-    op.create_index(op.f('ix_cached_patient_registrations_status'), 'cached_patient_registrations', ['status'], unique=False)
-    op.create_index(op.f('ix_cached_patient_registrations_temp_ref_id'), 'cached_patient_registrations', ['temp_ref_id'], unique=True)
+    if 'cached_patient_registrations' not in existing_tables:
+        op.create_table(
+            'cached_patient_registrations',
+            sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable=False),
+            sa.Column('temp_ref_id', sa.String(length=64), nullable=False),
+            sa.Column('idempotency_key', sa.String(length=255), nullable=False),
+            sa.Column('owner_id', postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column('owner_role', sa.String(length=20), nullable=False),
+            sa.Column('patient_data', sa.JSON(), nullable=False),
+            sa.Column('status', sa.String(length=20), server_default='PENDING', nullable=False),
+            sa.Column('failure_reason', sa.Text(), nullable=True),
+            sa.Column('error_details', sa.Text(), nullable=True),
+            sa.Column('retry_count', sa.Integer(), server_default='0', nullable=False),
+            sa.Column('last_attempt_at', sa.DateTime(timezone=True), nullable=True),
+            sa.Column('synced_at', sa.DateTime(timezone=True), nullable=True),
+            sa.Column('permanent_patient_id', postgresql.UUID(as_uuid=True), nullable=True),
+            sa.Column('permanent_patient_code', sa.String(length=32), nullable=True),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ondelete='CASCADE'),
+            sa.ForeignKeyConstraint(['permanent_patient_id'], ['patients.id'], ondelete='SET NULL'),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_cached_patient_registrations_idempotency_key'), 'cached_patient_registrations', ['idempotency_key'], unique=True, if_not_exists=True)
+        op.create_index(op.f('ix_cached_patient_registrations_owner_id'), 'cached_patient_registrations', ['owner_id'], unique=False, if_not_exists=True)
+        op.create_index(op.f('ix_cached_patient_registrations_status'), 'cached_patient_registrations', ['status'], unique=False, if_not_exists=True)
+        op.create_index(op.f('ix_cached_patient_registrations_temp_ref_id'), 'cached_patient_registrations', ['temp_ref_id'], unique=True, if_not_exists=True)
 
     # 2. Add foreign-key indexes for test_price_history
-    op.create_index(op.f('ix_test_price_history_test_id'), 'test_price_history', ['test_id'], unique=False)
-    op.create_index(op.f('ix_test_price_history_changed_by'), 'test_price_history', ['changed_by'], unique=False)
+    op.create_index(op.f('ix_test_price_history_test_id'), 'test_price_history', ['test_id'], unique=False, if_not_exists=True)
+    op.create_index(op.f('ix_test_price_history_changed_by'), 'test_price_history', ['changed_by'], unique=False, if_not_exists=True)
 
     # 3. Drop verified redundant duplicate indexes
     if is_pg:

@@ -15,11 +15,14 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def normalize_database_url(cls, v: str) -> str:
-        if v and v.startswith("postgresql://") and not v.startswith("postgresql+"):
-            v = v.replace("postgresql://", "postgresql+psycopg2://", 1)
-        if v and "supabase" in v and "sslmode" not in v:
-            separator = "&" if "?" in v else "?"
-            v = f"{v}{separator}sslmode=require"
+        if v:
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql+psycopg2://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+                v = v.replace("postgresql://", "postgresql+psycopg2://", 1)
+            if ("supabase" in v or "aivencloud" in v or "render.com" in v) and "sslmode" not in v:
+                separator = "&" if "?" in v else "?"
+                v = f"{v}{separator}sslmode=require"
         return v
 
     # Redis
@@ -285,8 +288,6 @@ class Settings(BaseSettings):
 
     # Storage Settings ('s3' for Joy.services S3, or 'local' fallback)
     STORAGE_PROVIDER: str = "s3"
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
 
     # S3 Object Storage (joy.services / AWS S3 / MinIO)
     S3_ENDPOINT_URL: str = "https://nz.in.s3.joy.services"

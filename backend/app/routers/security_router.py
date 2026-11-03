@@ -55,11 +55,22 @@ def revoke_session(session_id: uuid.UUID, current_user=Depends(get_current_user)
 
 
 @sessions_router.get("/all")
-def all_sessions(admin=Depends(require_admin), db: Session = Depends(get_db)):
-    """Admin: see all active sessions."""
+def all_sessions(
+    limit: int = Query(200, ge=1, le=500, description="Max active sessions to return"),
+    admin=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin: see active sessions bounded with deterministic sorting to prevent resource exhaustion."""
     from backend.app.models.active_session import ActiveSession
     from sqlalchemy.orm import joinedload
-    sessions = db.query(ActiveSession).options(joinedload(ActiveSession.user)).filter(ActiveSession.revoked_at.is_(None)).all()
+    sessions = (
+        db.query(ActiveSession)
+        .options(joinedload(ActiveSession.user))
+        .filter(ActiveSession.revoked_at.is_(None))
+        .order_by(ActiveSession.issued_at.desc())
+        .limit(limit)
+        .all()
+    )
     return [
         {
             "id": str(s.id),
@@ -78,7 +89,8 @@ def all_sessions(admin=Depends(require_admin), db: Session = Depends(get_db)):
 def login_history(
     user_id: Optional[uuid.UUID] = None,
     outcome: Optional[str] = None,
-    page: int = 1, page_size: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

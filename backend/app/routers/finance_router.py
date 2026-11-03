@@ -81,7 +81,8 @@ def create_expense(payload: ExpenseCreate, admin=Depends(require_admin),
 def list_expenses(
     date_from: Optional[date] = None, date_to: Optional[date] = None,
     category: Optional[str] = None, q: Optional[str] = None,
-    page: int = 1, page_size: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
     admin=Depends(require_admin), db: Session = Depends(get_db)
 ):
     items, total = finance_service.list_expenses(db, date_from, date_to, category, q, page, page_size)

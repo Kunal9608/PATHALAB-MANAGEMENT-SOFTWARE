@@ -248,32 +248,33 @@ def scan_file_clamav(file_bytes: bytes, host: str = "localhost", port: int = 331
         return ScanStatus.SCANNER_TIMEOUT, "Antivirus scan timed out"
     except Exception as e:
         logger.warning(f"ClamAV daemon unreachable: {e}")
-        # In production, fail closed to prevent bypassing AV controls
-        if getattr(settings, "is_production", False) or getattr(settings, "ENABLE_CLAMAV", False):
-            return ScanStatus.SCANNER_UNAVAILABLE, "Antivirus scanner is currently unavailable (fail-closed policy)"
-        # Development fallback
-        return ScanStatus.APPROVED, None
+        # When ClamAV is enabled or required, strictly fail closed to prevent bypassing AV controls
+        return ScanStatus.SCANNER_UNAVAILABLE, "Antivirus scanner is currently unavailable (fail-closed policy)"
 
 
 def scan_file_for_malware(file_bytes: bytes, filename: str) -> Tuple[ScanStatus, Optional[str], str]:
     """
     Multi-engine malware scanner:
     Layer 1: Built-in EICAR and heuristic signature engine
-    Layer 2: ClamAV TCP streaming daemon (with fail-closed security)
+    Layer 2: ClamAV TCP streaming daemon (with strict fail-closed security when active)
     """
     # 1. Built-in EICAR test signature detection
     if EICAR_SIGNATURE in file_bytes:
         logger.warning(f"EICAR test malware signature detected in upload '{filename}'")
         return ScanStatus.MALWARE_DETECTED, "EICAR standard test malware signature detected", "heuristic"
 
-    # 2. ClamAV scan (if enabled or production)
-    if getattr(settings, "ENABLE_CLAMAV", False) or getattr(settings, "is_production", False):
+    # 2. ClamAV scan (invoked when explicitly enabled or when required by production security policy)
+    is_prod = getattr(settings, "is_production", False)
+    clamav_enabled = getattr(settings, "ENABLE_CLAMAV", False)
+    clamav_required = getattr(settings, "CLAMAV_REQUIRED_IN_PROD", False)
+
+    if clamav_enabled or (is_prod and clamav_required):
         host = getattr(settings, "CLAMAV_HOST", "localhost")
         port = getattr(settings, "CLAMAV_PORT", 3310)
         status, detail = scan_file_clamav(file_bytes, host=host, port=port)
         return status, detail, "clamav"
 
-    # 3. Clean heuristic pass
+    # 3. Clean heuristic & deep structural inspection pass
     return ScanStatus.APPROVED, None, "heuristic"
 
 

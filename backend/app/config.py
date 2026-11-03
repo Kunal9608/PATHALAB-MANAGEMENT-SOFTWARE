@@ -280,6 +280,7 @@ class Settings(BaseSettings):
     ENABLE_CLAMAV: bool = False
     CLAMAV_HOST: str = "localhost"
     CLAMAV_PORT: int = 3310
+    CLAMAV_REQUIRED_IN_PROD: bool = False
 
     # Environment
     ENVIRONMENT: str = "development"

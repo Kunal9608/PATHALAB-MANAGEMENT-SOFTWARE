@@ -287,6 +287,22 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
+    @field_validator("ENVIRONMENT", mode="after")
+    @classmethod
+    def normalize_environment(cls, v: str) -> str:
+        if isinstance(v, str):
+            v_clean = v.strip().lower()
+            if v_clean in ("prod", "production", "prd"):
+                return "production"
+            if v_clean in ("dev", "development"):
+                return "development"
+            if v_clean in ("test", "testing"):
+                return "testing"
+            if v_clean in ("stage", "staging"):
+                return "staging"
+            return v_clean
+        return v
+
     # Storage Settings ('s3' for Joy.services S3, or 'local' fallback)
     STORAGE_PROVIDER: str = "s3"
 
@@ -328,7 +344,7 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        return self.ENVIRONMENT.lower() == "production"
+        return self.ENVIRONMENT.lower() in ("production", "prod", "prd")
 
     @property
     def cookie_secure(self) -> bool:

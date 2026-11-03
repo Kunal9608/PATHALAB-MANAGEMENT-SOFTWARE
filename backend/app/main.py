@@ -92,9 +92,10 @@ async def lifespan(app: FastAPI):
         print(f"  [WARN] Database engine disposal on shutdown: {e}")
 
 
-# Disable Swagger UI and ReDoc in production to prevent API schema exposure
-_docs_url = None if os.getenv("ENVIRONMENT", "development").lower() == "production" else "/docs"
-_redoc_url = None if os.getenv("ENVIRONMENT", "development").lower() == "production" else "/redoc"
+# Disable Swagger UI, ReDoc, and OpenAPI schema in production to prevent API schema exposure
+_docs_url = None if settings.is_production else "/docs"
+_redoc_url = None if settings.is_production else "/redoc"
+_openapi_url = None if settings.is_production else "/openapi.json"
 
 app = FastAPI(
     title="Akriti Diagnostics Center — Lab Management System",
@@ -102,6 +103,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url=_docs_url,
     redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
     lifespan=lifespan,
 )
 

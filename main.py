@@ -31,7 +31,7 @@ def check_env():
         sys.exit(1)
 
     env = os.getenv("ENVIRONMENT", "development").lower()
-    if env == "production":
+    if env in ("production", "prod", "prd"):
         jwt_key = (os.getenv("JWT_SECRET_KEY") or "").strip()
         insecure_placeholders = {
             "change-this-secret",
@@ -90,7 +90,7 @@ def check_redis():
         kwargs = {"socket_connect_timeout": 1.5}
         if redis_url.startswith("rediss://"):
             import ssl
-            env_prod = os.getenv("ENVIRONMENT", "development").lower() == "production"
+            env_prod = os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod", "prd")
             verify_ssl = os.getenv("REDIS_SSL_VERIFY", "true").lower() in ("true", "1", "yes")
             if env_prod and not verify_ssl:
                 print("\n[ERROR] REDIS_SSL_VERIFY cannot be disabled in production for rediss:// connections.")

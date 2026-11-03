@@ -580,14 +580,11 @@ def verify_otp_code(db: Session, email: str, otp_code: str, purpose: str,
         db.commit()
         raise ValueError("User inactive or not found")
 
-    # Unlock user account on successful OTP verification
-    if getattr(user, "is_locked", False):
-        user.is_locked = False
-        _redis_clear_fail(email)
-        logger.info(f"User {email} unlocked via successful OTP verification")
-
-    # Duplicate login block: auto-logout older sessions on other devices
-    session_repo.revoke_all_user_sessions(db, user.id)
+    # Strict OTP Purpose Allowlist (HIGH-01 Remediation)
+    VALID_OTP_PURPOSES = {"login", "password_reset", "delete_verify", "password_change"}
+    if purpose not in VALID_OTP_PURPOSES:
+        db.commit()
+        raise ValueError(f"Invalid or unauthorized OTP purpose: '{purpose}'")
 
     if purpose == "password_reset":
         reset_token = create_short_lived_token(str(user.id), "password_reset")
@@ -599,7 +596,25 @@ def verify_otp_code(db: Session, email: str, otp_code: str, purpose: str,
             "user": {"id": str(user.id), "name": user.name, "role": user.role},
         }
 
-    # For login via OTP
+    if purpose in ("delete_verify", "password_change"):
+        verification_token = create_short_lived_token(str(user.id), purpose)
+        db.commit()
+        return {
+            "verified": True,
+            "purpose": purpose,
+            "verification_token": verification_token,
+            "user": {"id": str(user.id), "name": user.name, "role": user.role},
+        }
+
+    # Strictly purpose == "login"
+    if getattr(user, "is_locked", False):
+        user.is_locked = False
+        _redis_clear_fail(email)
+        logger.info(f"User {email} unlocked via successful OTP verification")
+
+    # Duplicate login block: auto-logout older sessions on other devices
+    session_repo.revoke_all_user_sessions(db, user.id)
+
     if user.must_reset_password:
         reset_token = create_short_lived_token(str(user.id), "password_reset")
         db.commit()

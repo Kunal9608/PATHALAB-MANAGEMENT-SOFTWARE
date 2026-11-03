@@ -49,10 +49,13 @@ const OfflineQueue = (() => {
   }
 
   async function enqueue(endpoint, method, payload, idempotencyKey, tempRefId = null) {
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) {
+      throw new Error("Cannot queue offline action: active authenticated user session is required.");
+    }
     const d = await openDB();
     const refId = tempRefId || generateTempRefId();
     payload.temp_ref_id = refId;
-    const currentUserId = getCurrentUserId();
 
     // Ensure offline patient registrations target the durable offline endpoint
     if ((endpoint === '/api/v1/patients' || !endpoint) && method === 'POST') {
@@ -100,7 +103,8 @@ const OfflineQueue = (() => {
           if (userId) {
             items = items.filter(it => it.ownerId && String(it.ownerId) === String(userId));
           } else {
-            items = items.filter(it => !it.ownerId);
+            // Unauthenticated state: strictly isolate patient data, return empty
+            items = [];
           }
         }
         resolve(items);
@@ -197,6 +201,9 @@ const OfflineQueue = (() => {
   // ── Sync ──────────────────────────────────────────────────────────────────
   async function flush() {
     if (syncInProgress) return;
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) return; // Never sync without authenticated user session
+
     const online = await isOnline();
     if (!online) return;
 
@@ -476,7 +483,38 @@ const OfflineQueue = (() => {
     init();
   }
 
-  return { enqueue, flush, getAll, isOnline, resolveConflict, remove, retryItem, retryAll, stop };
+  async function clear() {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  }
+
+  async function purgeUserQueue(userId) {
+    if (!userId) return;
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const req = store.openCursor();
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (cursor) {
+          if (cursor.value.ownerId && String(cursor.value.ownerId) === String(userId)) {
+            cursor.delete();
+          }
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  }
+
+  return { enqueue, flush, getAll, isOnline, resolveConflict, remove, retryItem, retryAll, stop, clear, purgeUserQueue };
 })();
 
 window.OfflineQueue = OfflineQueue;

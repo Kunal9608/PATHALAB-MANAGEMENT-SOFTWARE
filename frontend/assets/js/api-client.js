@@ -40,8 +40,17 @@ const API = (() => {
   async function clearLocalAuthState({ skipLogoutCall = false } = {}) {
     localStorage.removeItem('akriti_current_user');
     localStorage.removeItem('akriti_tests_cache');
-    if (window.OfflineQueue && typeof window.OfflineQueue.stop === 'function') {
-      try { window.OfflineQueue.stop(); } catch (_) {}
+    if (window.OfflineQueue) {
+      try {
+        if (typeof window.OfflineQueue.stop === 'function') {
+          window.OfflineQueue.stop();
+        }
+        if (typeof window.OfflineQueue.clear === 'function') {
+          await window.OfflineQueue.clear();
+        }
+      } catch (e) {
+        console.error("OfflineQueue clear failed on logout:", e);
+      }
     }
     if (window.CacheManager) {
       try {

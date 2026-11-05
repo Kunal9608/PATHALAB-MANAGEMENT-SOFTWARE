@@ -21,7 +21,7 @@ def mock_db():
 def test_user():
     return User(
         id=uuid.uuid4(),
-        email="doctor@akritidc.in",
+        email=f"doctor_{uuid.uuid4().hex[:6]}@akritidc.in",
         name="Dr. Kunal",
         role=RoleEnum.admin,
         is_active=True,

@@ -22,6 +22,17 @@ const PatientForm = (() => {
   let labSettingsCache = null;
   let activeRender = null;
 
+  function escapeHtml(str) {
+    if (typeof window.escapeHtml === 'function') return window.escapeHtml(str);
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // ── Load tests from API with Stale-While-Revalidate caching ────────────────
   async function loadTests() {
     const cached = localStorage.getItem('akriti_tests_cache');

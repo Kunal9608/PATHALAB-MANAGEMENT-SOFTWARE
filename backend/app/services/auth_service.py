@@ -422,6 +422,11 @@ def login(db: Session, email: str, password: str, ip: str,
 
 
 def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
+    valid_purposes = {e.value for e in OtpPurposeEnum}
+    purpose_val = getattr(purpose, "value", purpose)
+    if purpose_val not in valid_purposes:
+        raise ValueError(f"Invalid or unauthorized OTP purpose: {purpose}")
+    purpose = purpose_val
     email = email.lower().strip()
     r = get_redis()
     now_ts = time.time()
@@ -519,8 +524,11 @@ def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
 
     # Reset OTP failure counter for this email
     if r:
-        r.delete(f"otp_fail:{email}")
-    else:
+        try:
+            r.delete(f"otp_fail:{email}")
+        except Exception as e:
+            logger.warning(f"Failed to reset Redis OTP fail counter: {e}")
+    with _auth_lock:
         _otp_fail_counts.pop(email, None)
 
     return True
@@ -528,7 +536,12 @@ def request_otp(db: Session, email: str, purpose: str, ip: str) -> bool:
 
 def verify_otp_code(db: Session, email: str, otp_code: str, purpose: str,
                     ip: Optional[str] = None, user_agent: Optional[str] = None) -> dict:
-    if not otp_code or not otp_code.isdigit():
+    valid_purposes = {e.value for e in OtpPurposeEnum}
+    purpose_val = getattr(purpose, "value", purpose)
+    if purpose_val not in valid_purposes:
+        raise ValueError(f"Invalid or unauthorized OTP purpose: {purpose}")
+
+    if not otp_code or not str(otp_code).strip().isdigit():
         raise ValueError("OTP must contain only numeric characters")
         
     email = email.lower().strip()
@@ -538,7 +551,7 @@ def verify_otp_code(db: Session, email: str, otp_code: str, purpose: str,
         db.query(OtpRequest)
         .filter(
             OtpRequest.email == email,
-            OtpRequest.purpose == purpose,
+            OtpRequest.purpose == purpose_val,
             OtpRequest.used_at.is_(None),
             OtpRequest.expires_at > now,
         )
@@ -553,12 +566,19 @@ def verify_otp_code(db: Session, email: str, otp_code: str, purpose: str,
         r = get_redis()
         fail_count = 0
         if r:
-            fail_key = f"otp_fail:{email}"
-            fail_count = r.incr(fail_key)
-            r.expire(fail_key, 300)
+            try:
+                fail_key = f"otp_fail:{email}"
+                fail_count = r.incr(fail_key)
+                r.expire(fail_key, 300)
+            except Exception as e:
+                logger.warning(f"Redis OTP fail count error: {e}")
+                with _auth_lock:
+                    fail_count = _otp_fail_counts.get(email, 0) + 1
+                    _otp_fail_counts[email] = fail_count
         else:
-            fail_count = _otp_fail_counts.get(email, 0) + 1
-            _otp_fail_counts[email] = fail_count
+            with _auth_lock:
+                fail_count = _otp_fail_counts.get(email, 0) + 1
+                _otp_fail_counts[email] = fail_count
             
         if fail_count >= 3:
             if otp_obj:

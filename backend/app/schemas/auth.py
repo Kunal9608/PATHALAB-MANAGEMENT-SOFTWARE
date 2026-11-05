@@ -1,6 +1,7 @@
 """Auth schemas — request/response DTOs."""
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from backend.app.models.otp_request import OtpPurposeEnum
 
 
 class LoginRequest(BaseModel):
@@ -11,7 +12,7 @@ class LoginRequest(BaseModel):
 
 class OtpRequestSchema(BaseModel):
     email: EmailStr
-    purpose: str = "login"  # login | password_reset
+    purpose: OtpPurposeEnum = OtpPurposeEnum.login
     recaptcha_token: Optional[str] = None
 
 
@@ -19,7 +20,7 @@ class OtpVerifyRequest(BaseModel):
     email: EmailStr
     otp: Optional[str] = None
     otp_code: Optional[str] = None
-    purpose: str = "login"
+    purpose: OtpPurposeEnum = OtpPurposeEnum.login
 
 
 class PasswordResetRequest(BaseModel):

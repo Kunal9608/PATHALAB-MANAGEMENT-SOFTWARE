@@ -247,7 +247,9 @@ const API = (() => {
       if (!options.silent && typeof window.Toast !== 'undefined') {
         window.Toast.show(`Too many failed attempts. Please try again in ${remainingSeconds}s`, "error");
       }
-      return new Promise(() => {});
+      const rateErr = new Error(`Too many failed attempts. Please try again in ${remainingSeconds}s`);
+      rateErr.category = 'RATE_LIMIT';
+      return Promise.reject(rateErr);
     }
 
     if (mutating && window.CacheManager && !options.skipCache) {
@@ -257,7 +259,9 @@ const API = (() => {
     if (activeRequests.has(requestKey)) {
         if (mutating && !options.allowConcurrent) {
             console.warn("Blocked duplicate concurrent mutation:", requestKey);
-            return new Promise(() => {});
+            const dupErr = new Error("Blocked duplicate concurrent mutation. Please wait for the current action to finish.");
+            dupErr.category = 'DUPLICATE_MUTATION';
+            return Promise.reject(dupErr);
         } else if (!mutating) {
             return activeRequests.get(requestKey);
         }

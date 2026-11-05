@@ -206,4 +206,7 @@ scratch/
 .gemini/
 
 # Maintenance & backup scripts (Render / cloud deployment)
-scripts/
+/scripts/
+*.tmp
+*.bak
+brain/
